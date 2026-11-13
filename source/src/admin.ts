@@ -1,0 +1,42 @@
+// 관리자(개발자) 전용 기능 스위치.
+// - 개발 서버(npm run dev)에서는 항상 켜진다.
+// - 배포된 빌드에서는 주소 끝에 ?admin 을 붙였을 때만 켜진다. 예: https://.../index.html?admin
+//   (비밀 장치가 아니라 편의 기능이다. 주소를 아는 사람은 누구나 켤 수 있다.)
+
+import { DEV_START_LEVEL } from './config';
+
+export const ADMIN: boolean = (() => {
+  if (import.meta.env.DEV) return true;
+  try {
+    return new URLSearchParams(window.location.search).has('admin');
+  } catch {
+    return false;
+  }
+})();
+
+/** 개발 서버에서 페이지를 열 때 바로 시작할 레벨 인덱스. 해당 없으면 null(타이틀부터). */
+export function devStartLevel(levelCount: number): number | null {
+  if (!import.meta.env.DEV) return null;
+  let n = DEV_START_LEVEL;
+  try {
+    const q = new URLSearchParams(window.location.search).get('level');
+    if (q !== null) n = Number(q);
+  } catch {
+    /* 무시 */
+  }
+  if (!Number.isInteger(n) || n < 1) return null;
+  return Math.min(n, levelCount) - 1;
+}
+
+/** 숫자키 입력을 레벨 인덱스로 바꾼다. 1~9는 LEVEL 1~9, 0은 LEVEL 10. 해당 레벨이 없으면 null. */
+export function levelFromKey(event: KeyboardEvent, levelCount: number): number | null {
+  if (!/^[0-9]$/.test(event.key)) return null;
+  const index = event.key === '0' ? 9 : Number(event.key) - 1;
+  return index < levelCount ? index : null;
+}
+
+/** 관리자 안내 문구용: "1~9, 0=10" 같은 키 설명 */
+export function levelKeysLabel(levelCount: number): string {
+  const top = Math.min(levelCount, 9);
+  return levelCount >= 10 ? `1~${top}, 0(=10)` : `1~${top}`;
+}
