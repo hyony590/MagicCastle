@@ -5,7 +5,7 @@
 export const DEV_START_LEVEL = 1;
 
 /** 화면 갱신 횟수(초당). 낮을수록 옛날 플래시 게임처럼 뚝뚝 끊겨 보인다. 부드럽게 하려면 60. */
-export const FPS = 20;
+export const FPS =  100;
 
 /** 맵(플레이 영역) 폭. 768 / 32 = 24칸. */
 export const WIDTH = 768;
