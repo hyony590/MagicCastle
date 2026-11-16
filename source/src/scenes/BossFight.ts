@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { audio } from '../audio';
-import { COLORS, FLOOR_Y, PLAY_HEIGHT, WIDTH } from '../config';
+import { FLOOR_Y, PLAY_HEIGHT, WIDTH } from '../config';
 import type { BossDef } from '../levels/types';
 
 // 보스전 규칙
@@ -13,8 +13,15 @@ import type { BossDef } from '../levels/types';
 
 type Rect = Phaser.Geom.Rectangle;
 
-const BOSS_SIZE = 64;
-const MARGIN = 40;
+/** 마녀 그림 배율: 32×32 픽셀 그림(텍스처 64×64)을 2배로 키워 화면에서 128×128로 그린다. */
+const BOSS_SCALE = 2;
+const BOSS_DRAW = 128;
+/** 판정 크기. 그림 네 귀퉁이의 빈 곳을 빼고 몸·빗자루에 맞춘 정사각형 */
+const BOSS_SIZE = 96;
+/** 그림 가운데에서 그림 속 발끝·모자 끝까지의 거리(그림 아래 3줄, 위 1줄이 비어 있다) */
+const BOSS_FEET = 52;
+const BOSS_HAT = 60;
+const MARGIN = 8;
 const STONE_SIZE = 14;
 const STONE_START_SPEED = 260;
 const STONE_GRAVITY = 1500;
@@ -26,7 +33,8 @@ const DODGE_DISTANCE = 130;
 const DODGE_SPEED_MULTIPLIER = 2.2;
 
 interface Stone {
-  obj: Phaser.GameObjects.Rectangle;
+  /** 반죽 덩어리 */
+  obj: Phaser.GameObjects.Image;
   vy: number;
   /** 보스가 이 돌을 보고 회피 여부를 이미 정했는지 */
   seen?: boolean;
@@ -42,9 +50,10 @@ export class BossFight {
   private x: number;
   private y: number;
   private target: { x: number; y: number };
+  /** 판정용(보이지 않음) */
   private body: Phaser.GameObjects.Rectangle;
-  private wings: Phaser.GameObjects.Rectangle[];
-  private eyes: Phaser.GameObjects.Rectangle[];
+  /** 마녀 쿠르르 그림 */
+  private sprite: Phaser.GameObjects.Image;
   private hoverUntil = 0;
   private nextHoverAt: number;
   private hurtUntil = 0;
@@ -67,11 +76,8 @@ export class BossFight {
     this.x = def.start.x;
     this.y = def.start.y;
     this.target = this.pickTarget();
-    this.wings = [-1, 1].map((s) =>
-      scene.add.rectangle(this.x + s * (BOSS_SIZE / 2 + 10), this.y - 8, 22, 34, 0x3b2560).setDepth(7),
-    );
-    this.body = scene.add.rectangle(this.x, this.y, BOSS_SIZE, BOSS_SIZE, COLORS.boss).setDepth(7);
-    this.eyes = [-14, 14].map((dx) => scene.add.rectangle(this.x + dx, this.y - 10, 10, 8, 0xffd23f).setDepth(7));
+    this.body = scene.add.rectangle(this.x, this.y, BOSS_SIZE, BOSS_SIZE).setVisible(false);
+    this.sprite = scene.add.image(this.x, this.y, 'witch').setScale(BOSS_SCALE).setDepth(7);
     this.nextHoverAt = now + Phaser.Math.Between(2500, 4000);
     this.sync(now);
   }
@@ -97,10 +103,7 @@ export class BossFight {
   tryThrow(px: number, feetY: number, now: number): boolean {
     if (this.defeated || !this.armed || now < this.nextThrowAt) return false;
     this.nextThrowAt = now + this.def.throwCooldownMs;
-    const obj = this.scene.add
-      .rectangle(px, feetY + STONE_SIZE / 2, STONE_SIZE, STONE_SIZE, COLORS.stone)
-      .setStrokeStyle(2, 0x5d6170)
-      .setDepth(6);
+    const obj = this.scene.add.image(px, feetY + STONE_SIZE / 2, 'dough').setDepth(6);
     this.stones.push({ obj, vy: STONE_START_SPEED });
     audio.play('push');
     return true;
@@ -118,12 +121,12 @@ export class BossFight {
   /** 다음 목적지. 일정 확률로 플레이어가 있는 곳을 노리고,
    *  나머지는 절반씩 층 하나의 발판 바로 위(맨 아래 바닥 포함) 또는 화면 아무 곳. */
   private pickTarget() {
-    const halfW = BOSS_SIZE / 2 + 22; // 날개 포함
+    const halfW = BOSS_DRAW / 2; // 그림이 화면 밖으로 나가지 않게
     const minX = MARGIN + halfW;
     const maxX = WIDTH - MARGIN - halfW;
     const x = Phaser.Math.Between(minX, maxX);
-    const lowest = FLOOR_Y[0] - BOSS_SIZE / 2; // 몸 아래가 바닥에 닿는 높이
-    const highest = MARGIN + BOSS_SIZE / 2;
+    const lowest = FLOOR_Y[0] - BOSS_FEET; // 발끝이 바닥에 닿는 높이
+    const highest = MARGIN + BOSS_HAT;
     const homing = this.def.homingChance + this.def.homingPerHit * (this.def.hp - this.hp);
     this.charging = false;
     if (this.player && Math.random() < homing) {
@@ -135,7 +138,7 @@ export class BossFight {
     }
     if (Math.random() < 0.5) {
       const floor = Phaser.Math.Between(0, FLOOR_Y.length - 1);
-      return { x, y: Phaser.Math.Clamp(FLOOR_Y[floor] - BOSS_SIZE / 2 - 2, highest, lowest) };
+      return { x, y: Phaser.Math.Clamp(FLOOR_Y[floor] - BOSS_FEET - 2, highest, lowest) };
     }
     return { x, y: Phaser.Math.Between(highest, lowest) };
   }
@@ -194,7 +197,7 @@ export class BossFight {
     const chance = this.def.dodgeChance + this.def.dodgePerHit * (this.def.hp - this.hp);
     if (Math.random() >= chance) return;
     const side = s.obj.x < this.x ? 1 : -1; // 돌 반대쪽으로
-    const halfW = BOSS_SIZE / 2 + 22;
+    const halfW = BOSS_DRAW / 2;
     this.target = { x: Phaser.Math.Clamp(this.x + side * DODGE_DISTANCE, MARGIN + halfW, WIDTH - MARGIN - halfW), y: this.y };
     this.charging = false;
     this.dodgeUntil = now + 450;
@@ -205,7 +208,7 @@ export class BossFight {
     const { x, y } = s.obj;
     s.obj.destroy();
     for (let i = 0; i < 5; i++) {
-      const bit = this.scene.add.rectangle(x, y, 6, 6, COLORS.stone).setDepth(8);
+      const bit = this.scene.add.rectangle(x, y, 6, 6, 0xf3e0b5).setDepth(8); // 반죽 부스러기
       this.scene.tweens.add({
         targets: bit,
         x: x + Phaser.Math.Between(-40, 40),
@@ -224,6 +227,7 @@ export class BossFight {
     if (this.hp > 0) {
       audio.play('bossHit');
       this.scene.cameras.main.shake(200, 0.006);
+      this.scene.cameras.main.flash(90, 255, 255, 255);
       this.target = this.pickTarget(); // 맞으면 다른 곳으로 날아간다
       return;
     }
@@ -233,7 +237,7 @@ export class BossFight {
     audio.play('bossDown');
     this.scene.cameras.main.shake(500, 0.01);
     this.scene.tweens.add({
-      targets: [this.body, ...this.wings, ...this.eyes],
+      targets: this.sprite,
       alpha: 0,
       y: `+=${PLAY_HEIGHT}`,
       angle: 90,
@@ -248,11 +252,11 @@ export class BossFight {
     const hurt = now < this.hurtUntil;
     const flash = hurt && Math.floor(now / 80) % 2 === 0;
     const hovering = now < this.hoverUntil;
-    const flap = Math.sin(now / 90) * 6;
-    this.body.setPosition(this.x, this.y).setFillStyle(flash ? COLORS.bossHurt : COLORS.boss);
-    this.wings.forEach((w, i) => w.setPosition(this.x + (i === 0 ? -1 : 1) * (BOSS_SIZE / 2 + 10), this.y - 8 + (i === 0 ? flap : -flap)));
-    const look = Math.sign(this.target.x - this.x) * 4;
-    const eyeColor = hovering ? 0xff3b3b : 0xffd23f; // 멈춰 있을 때 눈이 빨개진다
-    this.eyes.forEach((e, i) => e.setPosition(this.x + (i === 0 ? -14 : 14) + look, this.y - 10).setFillStyle(eyeColor));
+    const bob = Math.round(Math.sin(now / 160) * 3); // 빗자루가 위아래로 살짝 흔들린다
+    this.body.setPosition(this.x, this.y);
+    this.sprite.setPosition(this.x, this.y + bob).setFlipX(this.target.x < this.x);
+    if (flash) this.sprite.setTintFill(0xffffff); // 맞으면 하얗게 번쩍
+    else if (hovering) this.sprite.setTint(0xffb0b0); // 멈춰 있을 때 붉어진다
+    else this.sprite.clearTint();
   }
 }

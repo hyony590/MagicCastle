@@ -39,9 +39,14 @@ export interface LetterDef {
   x: number;
 }
 
+/** 몬스터 그림 종류. carrot(성난 당근)은 도시락 상자에서 나오는 몬스터다. */
+export type EnemyLook = 'pot' | 'onion' | 'milk' | 'salt' | 'broccoli' | 'toaster' | 'carrot';
+
 export interface EnemyDef {
   floor: number;
   x: number;
+  /** 몬스터 종류. 생략하면 레벨과 순서에 따라 돌아가며 정해진다(config.ts ENEMY_LOOKS). */
+  look?: EnemyLook;
   dir: 1 | -1;
   /** px/초 */
   speed: number;

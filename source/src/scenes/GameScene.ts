@@ -3,9 +3,11 @@ import {
   BLOCK_SIZE,
   BONUS_WORD,
   CHEST_ENEMY_RANGE,
+  COLUMNS,
   COLORS,
   DIFFICULTY,
   ENEMY,
+  ENEMY_LOOKS,
   FLAME,
   FLOOR_THICKNESS,
   FLOOR_Y,
@@ -15,15 +17,20 @@ import {
   PICKUP_PAUSE_MS,
   PLAY_HEIGHT,
   SCORE,
+  START_LIVES,
   TILE,
   WIDTH,
 } from '../config';
 import { LEVELS, segmentAt, validateLevel } from '../levels';
-import type { ChestContent, ChestDef, EnemyDef, ItemKind, LevelDef } from '../levels/types';
-import type { RunState } from '../state';
+import type { ChestContent, ChestDef, EnemyDef, EnemyLook, ItemKind, LevelDef } from '../levels/types';
+import { newRun, type RunState } from '../state';
+import { Menu, MenuButton } from '../ui/button';
 import { ADMIN, levelFromKey, levelKeysLabel } from '../admin';
 import { audio } from '../audio';
 import { BossFight } from './BossFight';
+import { ALL_MONSTERS, MONSTER_NAMES } from '../cast';
+import { banner, popText, STYLE, titleText } from '../ui/text';
+import { letterCookie, setCookieLit } from '../ui/letterCookie';
 
 /** hitstop: 아이템을 먹은 순간의 짧은 전체 정지 */
 type Phase = 'playing' | 'paused' | 'dying' | 'clear' | 'hitstop';
@@ -36,14 +43,15 @@ interface Ladder {
 }
 
 interface Pickup {
-  obj: Phaser.GameObjects.Shape;
+  obj: Phaser.GameObjects.Image;
   hit: Rect;
   taken: boolean;
 }
 
 interface Chest {
-  box: Phaser.GameObjects.Rectangle;
-  lid: Phaser.GameObjects.Rectangle;
+  /** level.chests 번호(기절해도 열린 상자를 기억하려고) */
+  index: number;
+  img: Phaser.GameObjects.Image;
   hit: Rect;
   floor: number;
   x: number;
@@ -53,15 +61,18 @@ interface Chest {
 }
 
 interface Letter {
-  obj: Phaser.GameObjects.Text;
+  obj: Phaser.GameObjects.Container;
   hit: Rect;
   char: string;
   taken: boolean;
 }
 
+
 interface Enemy {
+  /** 판정용(보이지 않음) */
   body: Phaser.GameObjects.Rectangle;
-  eye: Phaser.GameObjects.Rectangle;
+  sprite: Phaser.GameObjects.Image;
+  look: EnemyLook;
   min: number;
   max: number;
   dir: 1 | -1;
@@ -71,21 +82,37 @@ interface Enemy {
 }
 
 interface Trap {
-  flame: Phaser.GameObjects.Rectangle;
+  flame: Phaser.GameObjects.Image;
+  glow: Phaser.GameObjects.Image;
   hit: Rect;
   /** 없으면 항상 켜져 있다. */
   cycle?: { onMs: number; offMs: number; offsetMs: number };
   active: boolean;
 }
 
-const ITEM_STYLE: Record<ItemKind, number> = {
-  gem: 0x5ad1ff,
-  apple: 0xff5a5a,
-  coin: 0xffd23f,
+/** 아이템을 먹을 때 반짝이 가루 색 */
+/** 같은 입력이면 늘 같은 값을 주는 간단한 정수 해시(블록 모양 고르기용) */
+function hash(a: number, b: number, c: number) {
+  let h = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791);
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return Math.abs(h ^ (h >>> 16));
+}
+
+/** HUD에 그릴 수 있는 하트 수 */
+const HEART_SLOTS = 6;
+
+const ITEM_SPARK: Record<ItemKind, number[]> = {
+  gem: [0xbdeefa, 0xffffff],
+  apple: [0xff8fae, 0xffe08a],
+  coin: [0xffd27a, 0xffffff],
 };
 
-/** 몬스터 눈의 세로 위치(몸 중심 기준). */
-const EYE_DY = -ENEMY.height / 2 + 10;
+/** 아이템 종류별 그림(art/sprites.ts): 별사탕, 딸기, 쿠키 */
+const ITEM_TEXTURE: Record<ItemKind, string> = {
+  gem: 'item_gem',
+  apple: 'item_apple',
+  coin: 'item_coin',
+};
 
 export class GameScene extends Phaser.Scene {
   private run!: RunState;
@@ -94,17 +121,28 @@ export class GameScene extends Phaser.Scene {
   /** 일시정지 중에는 멈추는 플레이 시간(ms). 함정 주기와 부츠 지속 시간에 쓴다. */
   private elapsed = 0;
 
+  /** 판정·물리용(보이지 않음). 화면에는 playerSprite가 보인다. */
   private player!: Phaser.GameObjects.Rectangle;
-  private playerEye!: Phaser.GameObjects.Rectangle;
+  private playerSprite!: Phaser.GameObjects.Image;
   private facing: 1 | -1 = 1;
   private climbing: Ladder | null = null;
   private airborne = false;
   private airPeak = 0;
-  private boostUntil = 0;
+  /** 스페이스를 누른 시각(elapsed). 누른 순간 이벤트로 기록해서, 바닥에 없을 때 눌러도 잃어버리지 않는다. */
+  private jumpPressedAt = -Infinity;
+  /** 마지막으로 바닥에 서 있던 시각(elapsed) */
+  private groundAt = -Infinity;
+  /** 스피드 부츠를 신었는지. 시간 제한 없이, 죽거나 다음 레벨로 넘어갈 때(init)만 풀린다. */
+  private boosted = false;
 
   private ladders: Ladder[] = [];
   private items: Pickup[] = [];
   private chests: Chest[] = [];
+  /**
+   * 도시락 상자에서 나온 운동화. 바로 신지 않고 상자 위에 놓인다.
+   * 상자를 열 때는 이미 그 앞에 와 있으므로, 열린 뒤 0.6초가 지나 비켜나 있어야(ready) 다시 밟아서 신는다.
+   */
+  private boots: { obj: Phaser.GameObjects.Image; hit: Rect; openedAt: number; ready: boolean; taken: boolean }[] = [];
   private letters: Letter[] = [];
   private enemies: Enemy[] = [];
   private traps: Trap[] = [];
@@ -126,14 +164,18 @@ export class GameScene extends Phaser.Scene {
 
   private hud!: {
     lives: Phaser.GameObjects.Text;
+    /** 생명 하트 아이콘(최대 HEART_SLOTS개, 넘치면 ×N 글자) */
+    hearts: Phaser.GameObjects.Image[];
     level: Phaser.GameObjects.Text;
     score: Phaser.GameObjects.Text;
     items: Phaser.GameObjects.Text;
     boost: Phaser.GameObjects.Text;
     sound: Phaser.GameObjects.Text;
-    letters: Phaser.GameObjects.Text[];
+    letters: Phaser.GameObjects.Container[];
   };
   private overlay?: Phaser.GameObjects.Container;
+  /** 일시정지 화면의 버튼 묶음(키 입력 연결을 끊으려고 들고 있다) */
+  private pauseMenu?: Menu;
 
   constructor() {
     super('Game');
@@ -149,10 +191,11 @@ export class GameScene extends Phaser.Scene {
     this.climbing = null;
     this.airborne = false;
     this.airPeak = 0;
-    this.boostUntil = 0;
+    this.boosted = false;
     this.ladders = [];
     this.items = [];
     this.chests = [];
+    this.boots = [];
     this.letters = [];
     this.enemies = [];
     this.traps = [];
@@ -176,7 +219,8 @@ export class GameScene extends Phaser.Scene {
     this.buildChests();
     this.buildLetters();
     this.buildPlayer();
-    this.level.enemies.forEach((e) => this.spawnEnemy(e, 0));
+    // 몬스터 종류: 레벨 데이터의 look, 없으면 (레벨 번호 + 순서)로 ENEMY_LOOKS를 돌아가며 고른다.
+    this.level.enemies.forEach((e, i) => this.spawnEnemy(e, 0, e.look ?? ENEMY_LOOKS[(this.run.level + i) % ENEMY_LOOKS.length]));
     if (this.level.boss) {
       this.boss = new BossFight(
         this,
@@ -187,6 +231,10 @@ export class GameScene extends Phaser.Scene {
         },
         this.elapsed,
       );
+      // 기절 전에 보석을 다 모았으면 처음부터 공격할 수 있고, 깎아 둔 HP도 그대로다(맞은 만큼 빨라진 속도도)
+      if (this.items.every((it) => it.taken)) this.boss.arm();
+      const savedHp = this.run.taken?.level === this.run.level ? this.run.taken.bossHp : undefined;
+      if (savedHp !== undefined) this.boss.hp = savedHp;
     }
 
     this.physics.add.collider(this.player, platforms, undefined, () => this.climbing === null);
@@ -204,6 +252,15 @@ export class GameScene extends Phaser.Scene {
       mute: kb.addKey(K.M),
       action: kb.addKey(K.Z),
     };
+    // 점프는 프레임마다 확인하지 않고 누른 순간을 기록한다(짧게 톡 눌러도, 공중·멈춤 중에 눌러도 놓치지 않게).
+    this.jumpPressedAt = -Infinity;
+    this.groundAt = -Infinity;
+    // 점프 키: 스페이스, V(방향키는 오른손, 점프·공격(Z)은 왼손으로 누르기 좋게)
+    for (const key of [this.keys.jump, kb.addKey(K.V)]) {
+      key.on('down', () => {
+        if (this.phase === 'playing' || this.phase === 'hitstop') this.jumpPressedAt = this.elapsed;
+      });
+    }
 
     this.buildHud();
     if (ADMIN) this.setupAdmin();
@@ -213,7 +270,8 @@ export class GameScene extends Phaser.Scene {
       this.showBanner(`LEVEL ${this.run.level + 1}`, this.level.name, 1200);
     }
     audio.unlock();
-    audio.startMusic();
+    audio.startMusic(this.level.boss ? 'boss' : 'level');
+    this.cameras.main.fadeIn(320, 20, 10, 30);
   }
 
   update(_time: number, delta: number) {
@@ -240,6 +298,7 @@ export class GameScene extends Phaser.Scene {
     this.updatePlayer();
     this.updateEnemies(dt);
     this.boss?.update(this.elapsed, dt, { x: this.player.x, y: this.player.y });
+    if (this.boss && this.boss.hp < this.boss.maxHp) this.rememberBossHp(this.boss.hp);
     this.updateTraps();
     if (this.phase === 'playing') this.checkHazards();
     if (this.phase === 'playing') this.checkPickups();
@@ -248,48 +307,46 @@ export class GameScene extends Phaser.Scene {
 
   // ───────────────────────── 맵 구성 ─────────────────────────
 
+  /** 밤의 마녀 부엌 배경(art/background.ts). 보스 층은 보랏빛으로 더 어둡게, 높은 층일수록 조금씩 어두워진다. */
   private drawBackground() {
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.wall).fillRect(0, 0, WIDTH, PLAY_HEIGHT);
-    g.lineStyle(1, COLORS.brick);
-    for (let y = 0, row = 0; y < PLAY_HEIGHT; y += 24, row++) {
-      g.lineBetween(0, y, WIDTH, y);
-      for (let x = row % 2 ? 24 : 0; x < WIDTH; x += 48) g.lineBetween(x, y, x, y + 24);
-    }
+    const bg = this.add.image(0, 0, 'bg_kitchen').setOrigin(0, 0).setScale(2).setDepth(-10);
+    if (this.level.boss) bg.setTint(0xb48ad8);
+    else if (this.run.level >= 6) bg.setTint(0xd8c8e8);
+    // 화면 가장자리를 은은하게 어둡게(HUD 아래, 글자·알림보다 아래)
+    this.add.image(0, 0, 'vignette').setOrigin(0, 0).setDepth(15);
   }
 
-  /** 발판 블록 한 칸. 밟는 면(물리)은 윗면이고, 블록은 그 아래로 BLOCK_SIZE만큼 그린다. */
-  private drawBlock(g: Phaser.GameObjects.Graphics, col: number, top: number) {
+  /**
+   * 발판 블록 한 칸. 밟는 면(물리)은 윗면이고, 블록은 그 아래로 BLOCK_SIZE만큼 그린다.
+   * 같은 모양만 반복되지 않게 층·구간·칸마다 모양을 고른다(art/background.ts의 블록 그림).
+   * - 0층: 부엌 바닥 타일
+   * - 나머지: 나무 조리대(가끔 옹이·밀가루 자국), 구간에 따라 분홍 타일 조리대
+   */
+  private drawBlock(col: number, top: number, floor: number, segIndex: number, edge: 'left' | 'right' | null) {
     const x = col * TILE;
     const s = BLOCK_SIZE;
-    g.fillStyle(COLORS.floor).fillRect(x, top, TILE, s);
-    g.fillStyle(COLORS.floorTop).fillRect(x, top, TILE, 3); // 윗면 밝게
-    g.fillStyle(COLORS.floorTop).fillRect(x, top, 2, s); // 왼쪽 밝게
-    g.fillStyle(COLORS.floorBottom).fillRect(x + TILE - 2, top, 2, s); // 오른쪽 어둡게(칸 경계)
-    g.fillStyle(COLORS.floorBottom).fillRect(x, top + s - 3, TILE, 3); // 아랫면 어둡게
-    if (ADMIN) {
-      // 개발 중에는 칸 번호를 적는다. floors의 [a, b]와 바로 맞춰 볼 수 있다.
-      this.add
-        .text(x + TILE / 2, top + s / 2 + 1, String(col), {
-          fontFamily: 'monospace',
-          fontSize: '11px',
-          color: '#3b3e4a',
-        })
-        .setOrigin(0.5)
-        .setDepth(0.5);
-    }
+    const h = hash(this.run.level, floor, col);
+    let key: string;
+    if (floor === 0) key = h % 7 === 0 ? 'blk_floor1' : 'blk_floor0';
+    else if (hash(this.run.level, floor, segIndex + 50) % 3 === 0) key = 'blk_tile';
+    else key = h % 6 === 0 ? 'blk_wood1' : h % 6 === 1 ? 'blk_wood2' : 'blk_wood0';
+    this.add.image(x, top, key).setOrigin(0, 0).setDisplaySize(TILE, s);
+    // 발판 양끝 마감(틈 쪽 가장자리)
+    if (edge) this.add.image(x, top, 'blk_cap').setOrigin(0, 0).setDisplaySize(TILE, s).setFlipX(edge === 'right');
   }
 
   private buildFloors(): Phaser.GameObjects.Rectangle[] {
     const platforms: Phaser.GameObjects.Rectangle[] = [];
-    const g = this.add.graphics();
     this.level.floors.forEach((segments, floor) => {
       const top = FLOOR_Y[floor];
-      for (const [a, b] of segments) {
+      segments.forEach(([a, b], segIndex) => {
         const x = a * TILE;
         const w = (b - a) * TILE;
-        // 한 칸(32px)마다 네모 블록 하나. 레벨 데이터의 칸 번호와 화면이 그대로 대응한다.
-        for (let col = a; col < b; col++) this.drawBlock(g, col, top);
+        // 한 칸(32px)마다 블록 하나. 화면 끝이 아닌 구간 양끝에는 마감을 붙인다.
+        for (let col = a; col < b; col++) {
+          const edge = col === a && a > 0 ? 'left' : col === b - 1 && b < COLUMNS ? 'right' : null;
+          this.drawBlock(col, top, floor, segIndex, edge);
+        }
 
         // 위에서만 밟히는 한 방향 발판. 아래·옆에서는 통과한다.
         const r = this.add.rectangle(x + w / 2, top + FLOOR_THICKNESS / 2, w, FLOOR_THICKNESS);
@@ -300,33 +357,43 @@ export class GameScene extends Phaser.Scene {
         body.checkCollision.left = false;
         body.checkCollision.right = false;
         platforms.push(r);
-      }
+      });
     });
     return platforms;
   }
 
+  /** 나무 사다리: 기둥 두 개(세로로 반복) + 12px마다 가로대 */
   private buildLadders() {
-    const g = this.add.graphics().setDepth(1);
     for (const l of this.level.ladders) {
       const ladder: Ladder = { x: l.x, top: FLOOR_Y[l.floor + 1], bottom: FLOOR_Y[l.floor] };
       this.ladders.push(ladder);
-      g.fillStyle(COLORS.ladder);
-      g.fillRect(l.x - 12, ladder.top - 6, 3, ladder.bottom - ladder.top + 6);
-      g.fillRect(l.x + 9, ladder.top - 6, 3, ladder.bottom - ladder.top + 6);
-      for (let y = ladder.top + 4; y < ladder.bottom; y += 12) g.fillRect(l.x - 12, y, 24, 3);
+      const h = ladder.bottom - ladder.top + 6;
+      for (const dx of [-12, 8]) {
+        this.add.tileSprite(l.x + dx, ladder.top - 6, 4, h, 'ladder_rail').setOrigin(0, 0).setDepth(1);
+      }
+      for (let y = ladder.top + 4; y < ladder.bottom; y += 12) {
+        this.add.image(l.x - 12, y, 'ladder_rung').setOrigin(0, 0).setDepth(1);
+      }
     }
   }
 
   private buildTraps() {
     for (const t of this.level.traps) {
       const top = FLOOR_Y[t.floor];
+      // 가스레인지 화구와 불꽃
       this.add.rectangle(t.x, top - 3, 24, 6, COLORS.trapBase).setDepth(2);
-      const flame = this.add
-        .rectangle(t.x, top - 6, FLAME.width, FLAME.height - 6, COLORS.flame)
-        .setOrigin(0.5, 1)
-        .setDepth(2);
+      this.add.rectangle(t.x, top - 6, 18, 2, 0x2b1d2f).setDepth(2);
+      const flame = this.add.image(t.x, top - 5, 'flame1').setOrigin(0.5, 1).setDepth(2);
+      // 불꽃 주변 일렁이는 불빛(더하기 합성이라 주변이 환해진다)
+      const glow = this.add
+        .image(t.x, top - 14, 'glow')
+        .setTint(0xff9a4a)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(1.3)
+        .setDepth(1.5);
       this.traps.push({
         flame,
+        glow,
         hit: new Phaser.Geom.Rectangle(t.x - FLAME.width / 2, top - FLAME.height, FLAME.width, FLAME.height),
         cycle:
           t.onMs !== undefined && t.offMs !== undefined
@@ -339,80 +406,94 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildItems() {
-    for (const it of this.level.items) {
+    // 이 레벨에서 기절하기 전에 먹은 재료는 먹은 채로 둔다(번호를 맞추려고 보이지 않게 만들어 둔다).
+    const before = this.run.taken?.level === this.run.level ? this.run.taken.items : [];
+    this.level.items.forEach((it, i) => {
       const cy = FLOOR_Y[it.floor] - 14;
-      const color = ITEM_STYLE[it.kind];
-      const obj: Phaser.GameObjects.Shape =
-        it.kind === 'gem'
-          ? this.add.rectangle(it.x, cy, 14, 14, color).setAngle(45)
-          : this.add.circle(it.x, cy, 8, color);
-      obj.setDepth(3);
-      this.tweens.add({ targets: obj, y: cy - 3, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-      this.items.push({ obj, hit: new Phaser.Geom.Rectangle(it.x - 10, cy - 10, 20, 20), taken: false });
-    }
+      const obj = this.add.image(it.x, cy, ITEM_TEXTURE[it.kind]).setDepth(3);
+      const taken = before.includes(i);
+      if (taken) obj.setVisible(false);
+      else this.tweens.add({ targets: obj, y: cy - 3, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.items.push({ obj, hit: new Phaser.Geom.Rectangle(it.x - 10, cy - 10, 20, 20), taken });
+    });
+  }
+
+  /** 마녀 HP를 한 판 상태에 적어 둔다(기절해도 유지) */
+  private rememberBossHp(hp: number) {
+    if (this.run.taken?.level !== this.run.level) this.run.taken = { level: this.run.level, items: [] };
+    this.run.taken.bossHp = hp;
+  }
+
+  /** 먹은 재료 번호를 한 판 상태에 적어 둔다(기절해도 유지) */
+  private rememberTaken(index: number) {
+    if (this.run.taken?.level !== this.run.level) this.run.taken = { level: this.run.level, items: [] };
+    if (!this.run.taken.items.includes(index)) this.run.taken.items.push(index);
   }
 
   private buildChests() {
-    for (const c of this.level.chests) {
+    // 이 레벨에서 기절하기 전에 연 상자는 열린 채로, 나온 것(운동화·몬스터)도 그대로 다시 놓는다.
+    const saved = this.run.taken?.level === this.run.level ? this.run.taken.chests ?? {} : {};
+    this.level.chests.forEach((c, index) => {
       const top = FLOOR_Y[c.floor];
-      const box = this.add.rectangle(c.x, top - 10, 28, 20, COLORS.chest).setDepth(3);
-      const lid = this.add.rectangle(c.x, top - 17, 30, 6, COLORS.chestLid).setDepth(3);
-      this.chests.push({
-        box,
-        lid,
+      // 도시락 상자(28×20)
+      const img = this.add.image(c.x, top, 'chest_closed').setOrigin(0.5, 1).setDepth(3);
+      const chest: Chest = {
+        index,
+        img,
         hit: new Phaser.Geom.Rectangle(c.x - 14, top - 20, 28, 20),
         floor: c.floor,
         x: c.x,
         contents: c.contents,
         enemy: c.enemy,
         opened: false,
-      });
-    }
+      };
+      this.chests.push(chest);
+      const was = saved[index];
+      if (was) {
+        chest.opened = true;
+        img.setTexture('chest_open');
+        this.revealChest(chest, was.contents, was.look, was.dir, false);
+      }
+    });
   }
 
   private buildLetters() {
     for (const l of this.level.letters) {
       if (this.run.letters.includes(l.char)) continue; // 이미 모은 글자는 다시 놓지 않는다.
       const cy = FLOOR_Y[l.floor] - 16;
-      const obj = this.add
-        .text(l.x, cy, l.char, {
-          fontFamily: 'monospace',
-          fontSize: '18px',
-          fontStyle: 'bold',
-          color: '#1b1d26',
-          backgroundColor: '#f5e663',
-          padding: { x: 6, y: 2 },
-        })
-        .setOrigin(0.5)
-        .setDepth(3);
-      this.tweens.add({ targets: obj, angle: { from: -8, to: 8 }, duration: 600, yoyo: true, repeat: -1 });
+      // 분홍 아이싱 글자 쿠키: 좌우로 살랑, 위아래로 통통
+      const obj = letterCookie(this, l.x, cy, l.char).setDepth(3);
+      this.tweens.add({ targets: obj, angle: { from: -8, to: 8 }, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.tweens.add({ targets: obj, y: cy - 3, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
       this.letters.push({ obj, hit: new Phaser.Geom.Rectangle(l.x - 11, cy - 11, 22, 22), char: l.char, taken: false });
     }
   }
 
   private buildPlayer() {
     const feet = FLOOR_Y[this.level.start.floor ?? 0];
-    this.player = this.add.rectangle(this.level.start.x, feet - PLAYER.height / 2, PLAYER.width, PLAYER.height, COLORS.player);
-    this.player.setDepth(5);
+    this.player = this.add.rectangle(this.level.start.x, feet - PLAYER.height / 2, PLAYER.width, PLAYER.height);
+    this.player.setVisible(false); // 판정용. 그림은 playerSprite
     this.physics.add.existing(this.player);
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setGravityY(PLAYER.gravity);
     body.setCollideWorldBounds(true);
     body.setMaxVelocityY(900);
-    this.playerEye = this.add.rectangle(0, 0, 6, 6, 0x1b1d26).setDepth(6);
+    // 그림(28×40)은 판정(24×36)보다 조금 커서, 발끝을 판정 바닥에 맞춰 세운다.
+    this.playerSprite = this.add.image(this.player.x, this.body.bottom, 'mochi_idle').setOrigin(0.5, 1).setDepth(5);
   }
 
-  private spawnEnemy(def: EnemyDef, delayMs: number) {
+  private spawnEnemy(def: EnemyDef, delayMs: number, look: EnemyLook = 'pot') {
     // crossGaps면 틈을 무시하고 층 전체(0~WIDTH)를 발판으로 본다.
     const seg: [number, number] | null = def.crossGaps ? [0, WIDTH] : segmentAt(this.level, def.floor, def.x);
     if (!seg) return;
     const y = FLOOR_Y[def.floor] - ENEMY.height / 2;
-    const body = this.add.rectangle(def.x, y, ENEMY.width, ENEMY.height, COLORS.enemy).setDepth(4);
-    const eye = this.add.rectangle(def.x, y + EYE_DY, 6, 6, 0xffffff).setDepth(4);
+    const body = this.add.rectangle(def.x, y, ENEMY.width, ENEMY.height).setVisible(false);
+    const sprite = this.add.image(def.x, y, `${look}_walk1`).setDepth(4);
     const [left, right] = def.range ? [Math.max(seg[0], def.range[0]), Math.min(seg[1], def.range[1])] : seg;
     const enemy: Enemy = {
       body,
-      eye,
+      sprite,
+      look,
       min: left + ENEMY.width / 2,
       max: right - ENEMY.width / 2,
       dir: def.dir,
@@ -420,7 +501,7 @@ export class GameScene extends Phaser.Scene {
       activeAt: this.elapsed + delayMs,
     };
     if (delayMs > 0) {
-      this.tweens.add({ targets: [body, eye], alpha: 0.2, duration: 100, yoyo: true, repeat: Math.floor(delayMs / 200) });
+      this.tweens.add({ targets: sprite, alpha: 0.2, duration: 100, yoyo: true, repeat: Math.floor(delayMs / 200) });
     }
     this.enemies.push(enemy);
   }
@@ -474,12 +555,12 @@ export class GameScene extends Phaser.Scene {
       body.setVelocity(0, vy);
       if (vy < 0 && feet <= l.top) this.stopClimb(l.top);
       else if (vy > 0 && feet >= l.bottom) this.stopClimb(l.bottom);
-      this.syncEye();
+      this.syncSprite();
       return;
     }
 
     const onGround = body.blocked.down || body.touching.down;
-    const boosted = this.elapsed < this.boostUntil;
+    const boosted = this.boosted;
     const speed = PLAYER.walkSpeed * (boosted ? PLAYER.boostMultiplier : 1);
 
     // 공중에서는 방향을 바꿀 수 없다(airControl이 false일 때). 뛰기 전에 방향을 정해야 한다.
@@ -499,13 +580,20 @@ export class GameScene extends Phaser.Scene {
       const ladder = k.up.isDown ? this.ladderUp(feet) : k.down.isDown ? this.ladderDown(feet) : undefined;
       if (ladder) {
         this.startClimb(ladder);
-        this.syncEye();
+        this.syncSprite();
         return;
       }
-      if (Phaser.Input.Keyboard.JustDown(k.jump)) {
-        body.setVelocityY(-PLAYER.jumpVelocity);
-        audio.play('jump');
-      }
+      this.groundAt = this.elapsed;
+    }
+    // 최근에 눌렀고(버퍼), 바닥에 있거나 막 떨어지기 시작했으면(코요테 시간) 뛴다.
+    const wantJump = this.elapsed - this.jumpPressedAt <= PLAYER.jumpBufferMs;
+    const canJump = onGround || (this.elapsed - this.groundAt <= PLAYER.coyoteMs && body.velocity.y >= 0);
+    if (wantJump && canJump) {
+      body.setVelocityY(-PLAYER.jumpVelocity);
+      audio.play('jump');
+      this.dustPuff(this.player.x, feet, 4);
+      this.jumpPressedAt = -Infinity;
+      this.groundAt = -Infinity; // 공중에서 한 번 더 뛰지 못하게
     }
 
     // 낙하 높이 추적: 공중에서 가장 높았던 발 위치와 착지 위치의 차이로 판정한다.
@@ -519,14 +607,70 @@ export class GameScene extends Phaser.Scene {
     } else if (this.airborne) {
       this.airborne = false;
       if (feet - this.airPeak > PLAYER.safeFallHeight) this.die();
+      else this.dustPuff(this.player.x, feet, 6); // 착지 먼지
     }
-    this.syncEye();
+    this.syncSprite();
   }
 
-  private syncEye() {
-    const climbingNow = this.climbing !== null;
-    this.playerEye.setVisible(!climbingNow); // 사다리에서는 등을 보인다.
-    this.playerEye.setPosition(this.player.x + this.facing * 6, this.player.y - 9);
+  // ───────────────────────── 입자 효과 ─────────────────────────
+
+  /** 한 번 터지고 사라지는 입자 */
+  private burst(
+    x: number,
+    y: number,
+    texture: string,
+    count: number,
+    config: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig,
+  ) {
+    const lifespan = typeof config.lifespan === 'number' ? config.lifespan : 600;
+    const p = this.add.particles(x, y, texture, { emitting: false, ...config }).setDepth(19);
+    p.explode(count);
+    this.time.delayedCall(lifespan + 200, () => p.destroy());
+  }
+
+  /** 발밑 먼지 */
+  private dustPuff(x: number, y: number, count: number) {
+    this.burst(x, y - 2, 'dust', count, {
+      speed: { min: 20, max: 60 },
+      angle: { min: 200, max: 340 },
+      lifespan: 350,
+      scale: { start: 1.2, end: 0.2 },
+      alpha: { start: 0.7, end: 0 },
+      tint: 0xe8dcc8,
+    });
+  }
+
+  /** 반짝이 가루(아이템·글자·상자) */
+  private sparkle(x: number, y: number, tint: number | number[], count = 10) {
+    this.burst(x, y, 'spark', count, {
+      speed: { min: 50, max: 140 },
+      lifespan: 520,
+      scale: { start: 1.6, end: 0 },
+      alpha: { start: 1, end: 0.2 },
+      gravityY: 160,
+      tint,
+      rotate: { min: 0, max: 360 },
+    });
+    // 순간 번쩍이는 빛
+    const flash = this.add.image(x, y, 'glow').setTint(Array.isArray(tint) ? tint[0] : tint).setBlendMode(Phaser.BlendModes.ADD).setDepth(18).setScale(0.4);
+    this.tweens.add({ targets: flash, scale: 1.2, alpha: 0, duration: 260, onComplete: () => flash.destroy() });
+  }
+
+  /** 모찌 그림을 판정 위치에 맞추고, 상태에 따라 동작 그림을 고른다. */
+  private syncSprite() {
+    const body = this.body;
+    const step = Math.floor(this.elapsed / 150) % 2; // 0.15초마다 발을 바꾼다
+    let key = 'mochi_idle';
+    let flip = this.facing === -1;
+    if (this.climbing) {
+      key = 'mochi_climb'; // 사다리에서는 등을 보인다
+      flip = body.velocity.y !== 0 ? step === 1 : false; // 오르내릴 때 좌우로 흔들림
+    } else if (!(body.blocked.down || body.touching.down)) {
+      key = 'mochi_jump'; // 공중
+    } else if (body.velocity.x !== 0) {
+      key = step === 0 ? 'mochi_walk1' : 'mochi_walk2';
+    }
+    this.playerSprite.setTexture(key).setFlipX(flip).setPosition(this.player.x, body.bottom);
   }
 
   // ───────────────────────── 적·함정·수집 ─────────────────────────
@@ -543,7 +687,8 @@ export class GameScene extends Phaser.Scene {
         e.dir = -1;
       }
       e.body.x = x;
-      e.eye.setPosition(x + e.dir * 6, e.body.y + EYE_DY);
+      const step = Math.floor(this.elapsed / 220) % 2;
+      e.sprite.setTexture(`${e.look}_walk${step + 1}`).setFlipX(e.dir === -1).setPosition(x, e.body.y);
     }
   }
 
@@ -559,8 +704,12 @@ export class GameScene extends Phaser.Scene {
         t.active = true;
       }
       t.flame.setVisible(t.active || warning);
-      t.flame.setScale(1, t.active ? 1 : 0.25);
-      t.flame.setAlpha(t.active ? 0.6 + 0.4 * Math.abs(Math.sin(this.elapsed / 60)) : 0.6);
+      t.flame.setTexture(Math.floor(this.elapsed / 120) % 2 === 0 ? 'flame1' : 'flame2');
+      t.flame.setScale(1, t.active ? 1 : 0.3);
+      t.flame.setAlpha(t.active ? 1 : 0.6);
+      // 불빛이 일렁인다
+      const flicker = 0.45 + 0.15 * Math.sin(this.elapsed / 90) + 0.08 * Math.sin(this.elapsed / 37);
+      t.glow.setVisible(t.active).setAlpha(flicker);
     }
   }
 
@@ -587,9 +736,12 @@ export class GameScene extends Phaser.Scene {
     for (const l of this.letters) {
       if (l.taken || !overlaps(l.hit)) continue;
       l.taken = true;
+      this.sparkle(l.obj.x, l.obj.y, [0xffe08a, 0xffffff], 12);
       this.collectEffect(l.obj);
       this.addScore(SCORE.letter, l.obj.x, l.obj.y);
       if (!this.run.letters.includes(l.char)) this.run.letters.push(l.char);
+      const slot = this.hud.letters[[...BONUS_WORD].indexOf(l.char)];
+      if (slot) this.tweens.add({ targets: slot, scale: { from: 1.8, to: 1 }, duration: 300, ease: 'Back.out' });
       if ([...BONUS_WORD].every((c) => this.run.letters.includes(c))) {
         this.run.lives += 1;
         this.run.letters = [];
@@ -605,22 +757,43 @@ export class GameScene extends Phaser.Scene {
       this.openChest(c);
     }
 
+    for (const b of this.boots) {
+      if (b.taken) continue;
+      const over = overlaps(b.hit);
+      if (!b.ready) {
+        // 상자는 가장자리에 닿는 순간 열리므로, 걸어 들어오던 그대로 밟아 신지 않게
+        // 열린 뒤 0.6초가 지나고, 그때 운동화에서 비켜나 있어야 신을 수 있게 된다.
+        // (걸어서 지나가면 그대로 두고, 되돌아와 밟으면 신는다)
+        if (this.elapsed - b.openedAt >= 600 && !over) b.ready = true;
+        continue;
+      }
+      if (!over) continue;
+      b.taken = true;
+      this.boosted = true;
+      this.sparkle(b.obj.x, b.obj.y, [0x9fe3ff, 0xffffff, 0xff8fae], 14);
+      this.floatText('토끼 운동화를 신었다!', b.obj.x, b.obj.y - 24, '#7ad0ff');
+      this.collectEffect(b.obj);
+      audio.play('boots');
+    }
+
     let picked = false;
-    for (const it of this.items) {
-      if (it.taken || !overlaps(it.hit)) continue;
+    this.items.forEach((it, i) => {
+      if (it.taken || !overlaps(it.hit)) return;
       it.taken = true;
+      this.rememberTaken(i);
       picked = true;
       this.addScore(SCORE.item, it.obj.x, it.obj.y);
+      this.sparkle(it.obj.x, it.obj.y, ITEM_SPARK[this.level.items[i].kind]);
       it.obj.destroy();
       audio.play('pickup');
-    }
+    });
     // 보스전은 아이템이 아니라 보스를 쓰러뜨려야 끝난다. 보석을 모두 모으면 공격이 열린다.
     const allTaken = this.items.every((it) => it.taken);
     if (!this.boss && allTaken) this.clearLevel();
     else if (this.boss && allTaken && !this.boss.armed) {
       this.boss.arm();
       audio.play('oneUp');
-      this.showBanner('공격 가능!', '보스 위에서 Z키로 돌을 던져라', 1500);
+      this.showBanner('공격 가능!', '마녀 위에서 Z키로 반죽을 던져라', 1500, ['#ffe0ec', '#ff7aa8']);
       if (picked) this.pickupPause();
     } else if (picked) this.pickupPause();
   }
@@ -642,29 +815,65 @@ export class GameScene extends Phaser.Scene {
 
   private openChest(c: Chest) {
     c.opened = true;
-    c.box.setFillStyle(COLORS.chestOpen);
-    c.lid.setFillStyle(COLORS.chestOpen).setAngle(-25).setY(c.lid.y - 6);
+    c.img.setTexture('chest_open');
 
     const options = (Object.entries(DIFFICULTY.chestWeights) as [ChestContent, number][]).flatMap(([k, w]) =>
       Array<ChestContent>(w).fill(k),
     );
     const contents = c.contents ?? Phaser.Utils.Array.GetRandom(options);
-    const y = c.box.y - 24;
+    // 어떤 몬스터가 나올지는 무작위(몬스터 7종 중 하나), 플레이어 반대쪽으로 출발
+    const look = contents === 'enemy' ? Phaser.Utils.Array.GetRandom(ALL_MONSTERS) : undefined;
+    const dir: 1 | -1 = this.player.x < c.x ? 1 : -1;
+    // 기절해도 열린 상자와 나온 것을 기억한다
+    if (this.run.taken?.level !== this.run.level) this.run.taken = { level: this.run.level, items: [] };
+    this.run.taken.chests = { ...this.run.taken.chests, [c.index]: { contents, look, dir } };
+
     audio.play('chest');
+    // 뚜껑이 열리며 알록달록 가루가 튄다
+    this.sparkle(c.x, c.img.y - 12, [0xff8fae, 0x9fe3ff, 0xffe08a, 0xc9a0ff], 16);
+    this.tweens.add({ targets: c.img, scaleY: 1.25, scaleX: 0.85, duration: 80, yoyo: true });
+    this.revealChest(c, contents, look, dir, true);
+  }
+
+  /**
+   * 상자에서 나온 것을 놓는다. fresh = 지금 막 연 것(알림·소리·튀어나오는 연출),
+   * false = 기절 후 다시 시작할 때 전에 열어 둔 상자를 되살리는 것.
+   */
+  private revealChest(c: Chest, contents: ChestContent, look: EnemyLook | undefined, dir: 1 | -1 | undefined, fresh: boolean) {
+    const y = c.img.y - 44;
     if (contents === 'boots') {
-      this.boostUntil = this.elapsed + PLAYER.boostDurationMs;
-      this.floatText('스피드 부츠!', c.x, y, '#7ad0ff');
-      audio.play('boots');
+      // 운동화가 상자 위에 놓인다. 신을지 말지는 플레이어가 정한다.
+      // (기절 전에 이미 신었던 운동화도 기절하면 벗겨지므로 다시 상자 위에 놓인다)
+      const top = FLOOR_Y[c.floor] - 20; // 상자 윗면
+      const restY = top - 10;
+      const bob = (obj: Phaser.GameObjects.Image) =>
+        this.tweens.add({ targets: obj, y: restY - 3, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      const obj = this.add.image(c.x, fresh ? top + 4 : restY, 'item_boots').setDepth(4);
+      if (fresh) this.tweens.add({ targets: obj, y: restY, duration: 260, ease: 'Back.out', onComplete: () => bob(obj) });
+      else bob(obj);
+      this.boots.push({
+        obj,
+        hit: new Phaser.Geom.Rectangle(c.x - 12, top - 22, 24, 24),
+        openedAt: fresh ? this.elapsed : -Infinity,
+        ready: false,
+        taken: false,
+      });
+      if (fresh) {
+        this.floatText('토끼 운동화! 다시 밟으면 신어요', c.x, y, '#7ad0ff');
+        audio.play('bonus');
+      }
     } else {
-      audio.play('spawn');
-      this.floatText('앗, 몬스터!', c.x, y, '#ff7aa8');
-      const dir: 1 | -1 = this.player.x < c.x ? 1 : -1; // 플레이어 반대쪽으로 출발
+      const kind = look ?? Phaser.Utils.Array.GetRandom(ALL_MONSTERS);
+      if (fresh) {
+        audio.play('spawn');
+        this.floatText(`앗, ${MONSTER_NAMES[kind]}!`, c.x, y, '#ffb06b');
+      }
       const crossGaps = c.enemy?.crossGaps ?? false;
       const range: [number, number] =
         c.enemy?.range ?? (crossGaps ? [0, WIDTH] : [c.x - CHEST_ENEMY_RANGE, c.x + CHEST_ENEMY_RANGE]);
       // spawnEnemy가 배율을 곱하므로 미리 나눠 둔다.
       const speed = DIFFICULTY.chestEnemySpeed / DIFFICULTY.enemySpeedScale;
-      this.spawnEnemy({ floor: c.floor, x: c.x, dir, speed, range, crossGaps }, 800);
+      this.spawnEnemy({ floor: c.floor, x: c.x, dir: dir ?? 1, speed, range, crossGaps }, 800, kind);
     }
   }
 
@@ -678,12 +887,9 @@ export class GameScene extends Phaser.Scene {
     this.floatText(`+${points}`, x, y - 10, '#ffffff');
   }
 
+  /** 톡 튀어나왔다가 떠오르며 사라지는 짧은 알림(ui/text.ts) */
   private floatText(text: string, x: number, y: number, color: string) {
-    const t = this.add
-      .text(x, y, text, { fontFamily: 'monospace', fontSize: '14px', fontStyle: 'bold', color, stroke: '#000', strokeThickness: 3 })
-      .setOrigin(0.5)
-      .setDepth(20);
-    this.tweens.add({ targets: t, y: y - 30, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+    popText(this, x, y, text, color);
   }
 
   // ───────────────────────── 상태 전환 ─────────────────────────
@@ -693,18 +899,60 @@ export class GameScene extends Phaser.Scene {
       this.phase = 'paused';
       this.physics.world.pause();
       this.tweens.pauseAll();
-      this.overlay = this.makeOverlay('일시정지', 'P 또는 Esc로 계속');
+      this.overlay = this.makePauseMenu();
       audio.pauseMusic();
       audio.play('pause');
     } else if (this.phase === 'paused') {
-      this.phase = 'playing';
-      this.physics.world.resume();
-      this.tweens.resumeAll();
-      audio.play('pause');
-      audio.resumeMusic();
-      this.overlay?.destroy();
-      this.overlay = undefined;
+      this.resumeFromPause();
     }
+  }
+
+  /** 일시정지 화면: [계속하기] [처음부터 다시 시작] [시작 화면으로] */
+  private makePauseMenu(): Phaser.GameObjects.Container {
+    const cx = WIDTH / 2;
+    const cy = PLAY_HEIGHT / 2;
+    const bg = this.add.rectangle(cx, cy, WIDTH, PLAY_HEIGHT, 0x000000, 0.6);
+    const title = titleText(this, cx, cy - 140, '일시정지', 36, ['#ffffff', '#c9b8ff']);
+    const items: [string, () => void][] = [
+      ['계속하기', () => this.resumeFromPause()],
+      ['처음부터 다시 시작', () => this.leaveGame('restart')],
+      ['시작 화면으로', () => this.leaveGame('title')],
+    ];
+    const buttons = items.map(([label, fn], i) => new MenuButton(this, cx, cy - 50 + i * 72, 320, 54, label, fn, 22));
+    const hint = this.add
+      .text(cx, cy + 176, '↑ ↓  고르기     ENTER / SPACE  결정     ESC  계속', { ...STYLE.small, color: '#c9b8d6' })
+      .setOrigin(0.5);
+    this.pauseMenu = new Menu(this, buttons, 'vertical');
+    return this.add.container(0, 0, [bg, title, ...buttons.map((b) => b.container), hint]).setDepth(50);
+  }
+
+  private resumeFromPause() {
+    if (this.phase !== 'paused') return;
+    this.phase = 'playing';
+    this.physics.world.resume();
+    this.tweens.resumeAll();
+    audio.play('pause');
+    audio.resumeMusic();
+    this.pauseMenu?.destroy();
+    this.pauseMenu = undefined;
+    this.overlay?.destroy();
+    this.overlay = undefined;
+  }
+
+  /** 일시정지 화면에서 새 게임(LEVEL 1부터, 생명·점수·글자 처음 상태) 또는 시작 화면으로 */
+  private leaveGame(to: 'restart' | 'title') {
+    if (this.phase !== 'paused') return;
+    this.pauseMenu?.destroy();
+    this.pauseMenu = undefined;
+    this.physics.world.resume();
+    this.tweens.resumeAll();
+    audio.stopMusic();
+    this.phase = 'clear'; // 장면이 바뀌는 동안 입력·판정을 막는다
+    this.cameras.main.fadeOut(250, 20, 10, 30);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      if (to === 'restart') this.scene.restart({ run: newRun() });
+      else this.scene.start('Title');
+    });
   }
 
   private die() {
@@ -714,16 +962,44 @@ export class GameScene extends Phaser.Scene {
     audio.stopMusic();
     audio.play('death');
     this.climbing = null;
-    this.playerEye.setVisible(false);
-    this.player.setFillStyle(0xd9d9d9);
-    this.tweens.add({ targets: this.player, angle: 90 * this.facing, duration: 250 });
-    this.tweens.add({ targets: this.player, alpha: 0.3, duration: 120, yoyo: true, repeat: 4 });
-    this.floatText('★ ★', this.player.x, this.player.y - 28, '#ffe066');
+    // 발끝 기준으로 세워 둔 그림을 몸 가운데 기준으로 바꿔야 옆으로 쓰러질 때 바닥을 파고들지 않는다.
+    this.playerSprite.setTexture('mochi_idle').setTint(0xb8b0c8).setOrigin(0.5, 0.5).setPosition(this.player.x, this.player.y);
+    this.tweens.add({ targets: this.playerSprite, angle: 90 * this.facing, duration: 250 });
+    this.tweens.add({ targets: this.playerSprite, alpha: 0.3, duration: 120, yoyo: true, repeat: 4 });
+    this.showDizzyStars();
+    this.cameras.main.shake(180, 0.008);
+    this.fadeOutAfter(900);
 
     this.time.delayedCall(1200, () => {
       this.run.lives -= 1;
       if (this.run.lives > 0) this.scene.restart({ run: this.run });
       else this.scene.start('End', { type: 'gameover', score: this.run.score, level: this.run.level + 1 });
+    });
+  }
+
+  /** ms 뒤에 화면을 어둡게 닫는다(다음 장면으로 넘어가기 직전) */
+  private fadeOutAfter(ms: number) {
+    this.time.delayedCall(ms, () => this.cameras.main.fadeOut(280, 20, 10, 30));
+  }
+
+  /** 기절 연출: 쓰러진 모찌의 머리 위를 별 세 개가 빙글빙글 돈다. */
+  private showDizzyStars() {
+    // 모찌는 바라보던 쪽으로 쓰러지므로 머리도 그쪽에 있다.
+    const cx = this.player.x + this.facing * 13;
+    const cy = this.player.y - 14;
+    const stars = [0, 1, 2].map(() => this.add.image(cx, cy, 'dizzy_star').setDepth(21));
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: 1200,
+      onUpdate: (tw) => {
+        const t = tw.getValue() ?? 0;
+        stars.forEach((s, i) => {
+          const a = t * Math.PI * 4 + (i * Math.PI * 2) / 3; // 1.2초에 두 바퀴
+          s.setPosition(cx + Math.cos(a) * 14, cy + Math.sin(a) * 5); // 납작한 타원
+          s.setScale(Math.sin(a) > 0 ? 1 : 0.7); // 뒤쪽을 돌 때는 작게
+        });
+      },
     });
   }
 
@@ -734,7 +1010,9 @@ export class GameScene extends Phaser.Scene {
     audio.stopMusic();
     audio.play('clear');
     this.updateHud();
-    this.showBanner('LEVEL CLEAR!', '', 1500);
+    this.showBanner('LEVEL CLEAR!', '', 1500, ['#e6ffb0', '#5fd36a']);
+    this.sparkle(this.player.x, this.player.y - 10, [0xe6ffb0, 0xffe08a, 0xffffff], 20);
+    this.fadeOutAfter(1300);
     this.time.delayedCall(1600, () => {
       this.run.level += 1;
       if (this.run.level >= LEVELS.length) this.scene.start('End', { type: 'victory', score: this.run.score });
@@ -749,7 +1027,9 @@ export class GameScene extends Phaser.Scene {
     audio.stopMusic();
     this.updateHud();
     const name = this.level.boss?.name ?? '보스';
-    this.time.delayedCall(900, () => this.showBanner('VICTORY!', `${name} 격파!`, 2000));
+    this.time.delayedCall(900, () => this.showBanner('VICTORY!', `${name} 격파!`, 2000, ['#fffbd0', '#ffb43d']));
+    this.cameras.main.flash(250, 255, 240, 200);
+    this.fadeOutAfter(2900);
     this.time.delayedCall(3200, () => {
       this.run.level += 1;
       if (this.run.level >= LEVELS.length) {
@@ -765,11 +1045,7 @@ export class GameScene extends Phaser.Scene {
   /** 관리자 전용: 게임 중 숫자키로 해당 레벨로 바로 이동한다. 점수·생명·글자는 그대로 둔다. */
   private setupAdmin() {
     this.add
-      .text(WIDTH - 8, 6, `[관리자] ${levelKeysLabel(LEVELS.length)} 레벨 이동`, {
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        color: '#ff9f43',
-      })
+      .text(WIDTH - 8, 6, `[관리자] ${levelKeysLabel(LEVELS.length)} 레벨 이동`, { ...STYLE.small, color: '#ff9f43' })
       .setOrigin(1, 0)
       .setAlpha(0.8)
       .setDepth(60);
@@ -777,6 +1053,7 @@ export class GameScene extends Phaser.Scene {
       const level = levelFromKey(e, LEVELS.length);
       if (level === null) return;
       this.run.level = level;
+      this.run.taken = undefined; // 관리자 이동은 그 레벨을 처음부터
       this.scene.restart({ run: this.run });
     });
   }
@@ -786,20 +1063,23 @@ export class GameScene extends Phaser.Scene {
     const row1 = PLAY_HEIGHT + 15;
     const row2 = PLAY_HEIGHT + 37;
     this.add.rectangle(WIDTH / 2, PLAY_HEIGHT + HUD_HEIGHT / 2, WIDTH, HUD_HEIGHT, COLORS.hud).setDepth(30);
-    const style = { fontFamily: 'monospace', fontSize: '15px', color: '#e8e8f0' };
-    const at = (x: number, y: number) => this.add.text(x, y, '', style).setOrigin(0, 0.5).setDepth(31);
+    // 위아래 테두리 줄로 게임기 화면 느낌을 낸다.
+    this.add.rectangle(WIDTH / 2, PLAY_HEIGHT + 1, WIDTH, 2, 0xf4a6b8).setDepth(30);
+    this.add.rectangle(WIDTH / 2, PLAY_HEIGHT + 3, WIDTH, 1, 0x5e3a70).setDepth(30);
+    const at = (x: number, y: number, color = '#f3e9ff') =>
+      this.add.text(x, y, '', { ...STYLE.hud, color }).setOrigin(0, 0.5).setDepth(31);
     this.hud = {
-      lives: at(12, row1),
-      level: at(200, row1),
+      lives: at(12, row1, '#ff8fae'),
+      hearts: Array.from({ length: HEART_SLOTS }, (_, i) =>
+        this.add.image(62 + i * 16, row1, 'heart').setDepth(31),
+      ),
+      level: at(200, row1, '#fff4a8'),
       score: at(330, row1),
-      sound: at(WIDTH - 80, row1).setColor('#9a9db0'),
-      items: at(12, row2),
-      boost: at(330, row2).setColor('#7ad0ff'),
+      sound: at(WIDTH - 86, row1, '#9a8fb0'),
+      items: at(12, row2, '#9fe3ff'),
+      boost: at(330, row2, '#7ad0ff'),
       letters: [...BONUS_WORD].map((c, i) =>
-        this.add
-          .text(WIDTH - 110 + i * 26, row2, c, { ...style, fontStyle: 'bold' })
-          .setOrigin(0.5)
-          .setDepth(31),
+        letterCookie(this, WIDTH - 20 - (BONUS_WORD.length - 1 - i) * 22, row2, c, 'small').setDepth(31),
       ),
     };
     this.updateHud();
@@ -808,7 +1088,9 @@ export class GameScene extends Phaser.Scene {
   private updateHud() {
     const remaining = this.items.filter((i) => !i.taken).length;
     const lives = Math.max(this.run.lives, 0);
-    this.hud.lives.setText(`LIVES ${lives > 5 ? `♥×${lives}` : '♥'.repeat(lives)}`);
+    // 하트 아이콘: 남은 생명만큼 빨간 하트, 잃은 생명은 빈 하트(처음 생명 수까지). 최대 HEART_SLOTS개
+    this.hud.lives.setText('LIFE');
+    this.hud.hearts.forEach((h, i) => h.setVisible(i < Math.max(lives, START_LIVES)).setTexture(i < lives ? 'heart' : 'heart_empty'));
     this.hud.level.setText(`LEVEL ${this.run.level + 1}`);
     this.hud.score.setText(`SCORE ${String(this.run.score).padStart(6, '0')}`);
     if (this.boss && !this.boss.armed) {
@@ -819,50 +1101,15 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.hud.items.setText(`ITEM ${this.items.length - remaining}/${this.items.length}`);
     }
-    const boostLeft = this.boostUntil - this.elapsed;
-    this.hud.boost.setText(boostLeft > 0 ? `BOOTS ${(boostLeft / 1000).toFixed(1)}s` : '');
+
+    this.hud.boost.setText(this.boosted ? 'BOOTS ON' : '');
     this.hud.sound.setText(audio.muted ? 'M ♪OFF' : 'M ♪ON');
-    [...BONUS_WORD].forEach((c, i) =>
-      this.hud.letters[i].setColor(this.run.letters.includes(c) ? '#f5e663' : '#4a4d5c'),
-    );
+    [...BONUS_WORD].forEach((c, i) => setCookieLit(this.hud.letters[i], this.run.letters.includes(c)));
   }
 
-  private makeOverlay(title: string, sub: string): Phaser.GameObjects.Container {
-    const bg = this.add.rectangle(WIDTH / 2, PLAY_HEIGHT / 2, WIDTH, PLAY_HEIGHT, 0x000000, 0.55);
-    const t1 = this.add
-      .text(WIDTH / 2, PLAY_HEIGHT / 2 - 14, title, { fontFamily: 'monospace', fontSize: '36px', fontStyle: 'bold', color: '#ffffff' })
-      .setOrigin(0.5);
-    const t2 = this.add
-      .text(WIDTH / 2, PLAY_HEIGHT / 2 + 26, sub, { fontFamily: 'monospace', fontSize: '16px', color: '#c8c8d8' })
-      .setOrigin(0.5);
-    return this.add.container(0, 0, [bg, t1, t2]).setDepth(50);
-  }
-
-  private showBanner(title: string, sub: string, ms: number) {
-    const t1 = this.add
-      .text(WIDTH / 2, PLAY_HEIGHT / 2 - 12, title, {
-        fontFamily: 'monospace',
-        fontSize: '40px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 6,
-      })
-      .setOrigin(0.5)
-      .setDepth(40);
-    const t2 = this.add
-      .text(WIDTH / 2, PLAY_HEIGHT / 2 + 30, sub, {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#e0e0f0',
-        stroke: '#000000',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5)
-      .setDepth(40);
-    this.time.delayedCall(ms, () => {
-      this.tweens.add({ targets: [t1, t2], alpha: 0, duration: 300, onComplete: () => (t1.destroy(), t2.destroy()) });
-    });
+  /** 화면 가운데 큰 알림. colors는 글자 위·아래 그라데이션 색 */
+  private showBanner(title: string, sub: string, ms: number, colors?: [string, string]) {
+    banner(this, WIDTH / 2, PLAY_HEIGHT / 2, title, sub, ms, colors);
   }
 }
 

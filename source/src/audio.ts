@@ -31,24 +31,100 @@ function freq(note: string): number {
   return 440 * Math.pow(2, semis / 12);
 }
 
-// ── 배경음악: 오리지널 8마디 반복곡 (8분음표 64칸, '-'는 앞 음 유지 또는 쉼) ──
-const TEMPO = 144;
-const STEP = 60 / TEMPO / 2;
-const MELODY = [
-  'E5', '-', 'C5', 'D5', 'E5', '-', 'A4', '-',
-  'G5', '-', 'F5', 'E5', 'D5', '-', '-', '-',
-  'F5', '-', 'D5', 'E5', 'F5', '-', 'B4', '-',
-  'E5', 'D5', 'C5', 'B4', 'A4', '-', '-', '-',
-  'A4', 'C5', 'E5', 'A5', 'G5', 'E5', 'C5', 'E5',
-  'F5', '-', 'E5', 'D5', 'E5', '-', '-', '-',
-  'D5', 'F5', 'A5', 'F5', 'E5', 'D5', 'C5', 'B4',
-  'A4', '-', 'E4', '-', 'A4', '-', '-', '-',
-];
-/** 마디마다 [근음, 5음]. 4분음표로 번갈아 친다. */
-const BASS: [string, string][] = [
-  ['A2', 'E3'], ['G2', 'D3'], ['F2', 'C3'], ['E2', 'B2'],
-  ['A2', 'E3'], ['D3', 'A3'], ['G2', 'D3'], ['A2', 'E3'],
-];
+// ── 배경음악(오리지널). 8분음표 한 칸씩. '-'는 앞 음 늘이기, '.'는 쉼 ──
+// 레벨: '토끼 폴카' — G장조 2/4, 깡충깡충 빠른 폴카, 오르골 멜로디.
+// 보스: '마녀의 소동' — 빠른 4/4 단조, 쉬지 않는 베이스와 북.
+export type MusicTrack = 'level' | 'boss';
+type SongId = 'polka' | 'boss';
+
+interface Track {
+  tempo: number;
+  /** 한 마디 칸 수(8분음표) */
+  bar: number;
+  /** 멜로디 소리: box = 오르골, square = 8비트 */
+  lead: 'box' | 'square';
+  /** 베이스를 치는 칸(마디 안). 근음과 5음을 번갈아 친다. 'every'면 칸마다 근음·옥타브를 번갈아 */
+  bass: number[] | 'every';
+  /** 짧은 화음(짝)을 치는 칸 */
+  chord: number[];
+  /** 숟가락 톡톡 칸 */
+  tick: number[];
+  /** 북(쿵·탁) 칸 */
+  kick?: number[];
+  snare?: number[];
+  /** 네 마디마다 가마솥 보글 */
+  bubble?: boolean;
+  melody: string[];
+  /** 마디마다 [베이스, 화음 음들...] */
+  chords: string[][];
+}
+
+const TRACKS: Record<SongId, Track> = {
+  polka: {
+    tempo: 168,
+    bar: 4,
+    lead: 'box',
+    bass: [0],
+    chord: [2],
+    tick: [1, 3],
+    // prettier-ignore
+    melody: [
+      'B4', 'D5', 'G5', '-',   'B5', '-', 'G5', '-',
+      'A5', 'F#5', 'D5', 'F#5', 'A5', '-', '-', '.',
+      'A4', 'C5', 'F#5', 'A5', 'C6', '-', 'A5', '-',
+      'B5', 'A5', 'G5', 'D5',  'G5', '-', '-', '.',
+      'D5', 'G5', 'B5', 'G5',  'D6', '-', 'B5', '-',
+      'C6', 'B5', 'A5', 'G5',  'E5', '-', 'G5', '-',
+      'F#5', 'G5', 'A5', 'D6', 'C6', '-', 'A5', 'F#5',
+      'G5', '-', 'D5', '-',    'G5', '-', '.', '.',
+      'E5', 'G5', 'C6', '-',   'C6', 'B5', 'A5', 'G5',
+      'G5', 'D5', 'B4', 'D5',  'G5', '-', '-', '.',
+      'F#5', 'A5', 'D6', '-',  'C6', 'A5', 'F#5', 'D5',
+      'B4', 'D5', 'G5', 'B5',  'D6', '-', '-', '.',
+      'E6', '-', 'C6', '-',    'G5', '-', 'E5', '-',
+      'D6', '-', 'B5', '-',    'G5', '-', 'D5', '-',
+      'A5', 'B5', 'C6', 'A5',  'F#5', '-', 'D5', '-',
+      'G5', 'B5', 'D6', 'B5',  'G5', '-', '.', '.',
+    ],
+    // prettier-ignore
+    chords: [
+      ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'], ['D3', 'F#4', 'A4'], ['D3', 'F#4', 'A4'],
+      ['D3', 'F#4', 'C5'], ['D3', 'F#4', 'C5'], ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'],
+      ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'], ['C3', 'E4', 'G4'], ['C3', 'E4', 'G4'],
+      ['D3', 'F#4', 'A4'], ['D3', 'F#4', 'A4'], ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'],
+      ['C3', 'E4', 'G4'], ['C3', 'E4', 'G4'], ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'],
+      ['D3', 'F#4', 'A4'], ['D3', 'F#4', 'A4'], ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'],
+      ['C3', 'E4', 'G4'], ['C3', 'E4', 'G4'], ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'],
+      ['D3', 'F#4', 'A4'], ['D3', 'F#4', 'A4'], ['G2', 'B4', 'D5'], ['G2', 'B4', 'D5'],
+    ],
+  },
+  boss: {
+    tempo: 168,
+    bar: 8,
+    lead: 'square',
+    bass: 'every',
+    chord: [2, 6],
+    tick: [1, 3, 5, 7],
+    kick: [0, 4],
+    snare: [2, 6],
+    // prettier-ignore
+    melody: [
+      'E5', '-', 'B4', '-', 'G5', 'F#5', 'E5', '-',
+      'D#5', 'E5', 'F#5', '-', 'B4', '-', '-', '.',
+      'C5', 'E5', 'G5', '-', 'F#5', 'E5', 'D#5', 'E5',
+      'F#5', '-', '-', '-', 'D#5', '-', 'B4', '-',
+      'E5', 'G5', 'B5', '-', 'A5', 'G5', 'F#5', 'G5',
+      'E5', '-', 'B4', '-', 'E5', '-', 'G5', '-',
+      'A5', 'G5', 'F#5', 'E5', 'C5', '-', 'E5', '-',
+      'D#5', '-', 'F#5', '-', 'B5', '-', '.', '.',
+    ],
+    // prettier-ignore
+    chords: [
+      ['E2', 'G4', 'B4'], ['E2', 'G4', 'B4'], ['C2', 'E4', 'G4'], ['B1', 'D#4', 'F#4'],
+      ['E2', 'G4', 'B4'], ['E2', 'G4', 'B4'], ['A1', 'C4', 'E4'], ['B1', 'D#4', 'A4'],
+    ],
+  },
+};
 
 class AudioManager {
   private ctx?: AudioContext;
@@ -61,6 +137,8 @@ class AudioManager {
   private musicTimer?: number;
   private nextNoteTime = 0;
   private step = 0;
+  /** 지금 나오는 곡 */
+  private song: SongId = 'polka';
 
   constructor() {
     try {
@@ -164,9 +242,16 @@ class AudioManager {
     }
   }
 
-  startMusic() {
+  /** 곡을 처음부터 튼다. 같은 곡이 이미 나오고 있으면 그대로 둔다. */
+  startMusic(track: MusicTrack = 'level') {
     const ctx = this.ensure();
-    if (!ctx || this.musicTimer !== undefined) return;
+    if (!ctx) return;
+    const song: SongId = track === 'boss' ? 'boss' : 'polka';
+    if (this.musicTimer !== undefined) {
+      if (this.song === song) return;
+      this.pauseMusic();
+    }
+    this.song = song;
     this.step = 0;
     this.resumeMusic();
   }
@@ -190,6 +275,7 @@ class AudioManager {
     this.pauseMusic();
     this.step = 0;
   }
+
 
   // ───────── 내부 ─────────
 
@@ -253,24 +339,69 @@ class AudioManager {
     if (this.nextNoteTime < ctx.currentTime - 0.2) this.nextNoteTime = ctx.currentTime + 0.05;
     while (this.nextNoteTime < ctx.currentTime + 0.12) {
       this.playStep(this.step, this.nextNoteTime);
-      this.nextNoteTime += STEP;
-      this.step = (this.step + 1) % MELODY.length;
+      const tr = TRACKS[this.song];
+      this.nextNoteTime += 60 / tr.tempo / 2;
+      this.step = (this.step + 1) % tr.melody.length;
     }
   }
 
   private playStep(step: number, t: number) {
     const out = this.musicBus!;
-    const note = MELODY[step];
-    if (note !== '-') {
+    const tr = TRACKS[this.song];
+    const stepLen = 60 / tr.tempo / 2;
+    const note = tr.melody[step];
+    const inBar = step % tr.bar;
+    const barIndex = Math.floor(step / tr.bar);
+    const chord = tr.chords[barIndex % tr.chords.length];
+    if (note !== '-' && note !== '.') {
       let len = 1;
-      while (MELODY[(step + len) % MELODY.length] === '-' && len < 4) len++;
-      this.tone(out, 'square', freq(note), t, STEP * len * 0.9, 0.11);
+      while (tr.melody[(step + len) % tr.melody.length] === '-' && len < 4) len++;
+      if (tr.lead === 'box') {
+        // 오르골: 맑은 삼각파 + 한 옥타브 위 작은 종소리
+        this.pluck(out, 'triangle', freq(note), t, stepLen * len * 1.1 + 0.15, 0.2);
+        this.pluck(out, 'sine', freq(note) * 2, t, 0.25, 0.06);
+      } else {
+        this.tone(out, 'square', freq(note), t, stepLen * len * 0.85, 0.09);
+      }
     }
-    if (step % 2 === 0) {
-      const [root, fifth] = BASS[Math.floor(step / 8)];
-      this.tone(out, 'triangle', freq(step % 4 === 0 ? root : fifth), t, STEP * 1.8, 0.28);
+    const root = freq(chord[0]);
+    if (tr.bass === 'every') {
+      // 쉬지 않는 베이스: 근음과 한 옥타브 위를 번갈아
+      this.pluck(out, 'triangle', inBar % 2 === 0 ? root : root * 2, t, stepLen * 0.9, 0.3);
+    } else {
+      const i = tr.bass.indexOf(inBar);
+      // 통통 뜯는 베이스: 근음·5음을 번갈아(마디마다 순서도 바꿔서 단조롭지 않게)
+      if (i >= 0) this.pluck(out, 'triangle', (i + barIndex) % 2 === 0 ? root : root * 1.5, t, 0.32, 0.3);
     }
-    if (step % 2 === 1) this.burst(out, t, 0.03, 0.05, 7000);
+    // 짝: 부드러운 짧은 화음
+    if (tr.chord.includes(inBar)) {
+      const wave: OscillatorType = tr.lead === 'box' ? 'triangle' : 'sawtooth';
+      const vol = tr.lead === 'box' ? 0.05 : 0.02;
+      chord.slice(1).forEach((n) => this.pluck(out, wave, freq(n), t, 0.12, vol));
+    }
+    if (tr.tick.includes(inBar)) this.burst(out, t, 0.025, tr.lead === 'box' ? 0.04 : 0.04, tr.lead === 'box' ? 6000 : 8000);
+    if (tr.kick?.includes(inBar)) this.tone(out, 'sine', 150, t, 0.12, 0.35, 45);
+    if (tr.snare?.includes(inBar)) this.burst(out, t, 0.08, 0.12, 1500);
+    // 네 마디마다 가마솥 보글
+    if (tr.bubble && step % (tr.bar * 4) === tr.bar * 4 - 1) {
+      this.tone(out, 'sine', 300, t, 0.12, 0.05, 620);
+      this.tone(out, 'sine', 360, t + 0.09, 0.1, 0.04, 720);
+    }
+  }
+
+  /** 짧게 튕기는 소리(오르골·뜯는 베이스): 바로 커졌다가 서서히 줄어든다 */
+  private pluck(out: AudioNode, type: OscillatorType, f: number, t: number, dur: number, vol: number) {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(out);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
   }
 }
 

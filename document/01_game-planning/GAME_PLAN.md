@@ -10,6 +10,7 @@
 
 - [플레이 규칙 보완](GAMEPLAY_RULES.md) — 애니메이션, 몬스터 AI, 충돌, 상태 전환.
 - [스테이지 배치 명세](STAGE_LAYOUTS.md) — LEVEL 1~3의 맵과 오브젝트 좌표, LEVEL 4~10의 자료 현황.
+- [게임 콘셉트](CONCEPT.md) — 모찌의 마녀 부엌: 등장인물, 분위기, 게임 요소 대응.
 - [원작 참고 자료](../02_reference/ORIGINAL_REFERENCES.md) — 캡처, 영상, 플레이 관찰과 출처.
 
 ## 작업 로드맵

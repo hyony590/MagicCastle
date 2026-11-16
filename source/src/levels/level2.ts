@@ -33,7 +33,7 @@ export const level2: LevelDef = {
     { floor: 3, x: 380, enemy: {range: [0, 768], crossGaps : true} },
   ],
   letters: [
-    { char: 'T', floor: 4, x: 400 },
+    { char: 'B', floor: 4, x: 400 },
   ],
   enemies: [
     

@@ -2,7 +2,7 @@
 
 /** 개발 서버(npm run dev)에서 타이틀을 건너뛰고 바로 시작할 레벨(1부터). 0이면 타이틀부터.
  *  주소 끝에 ?level=3 처럼 붙이면 그 레벨로 시작한다. 배포 빌드에는 영향이 없다. */
-export const DEV_START_LEVEL = 1;
+export const DEV_START_LEVEL = 0;
 
 /** 화면 갱신 횟수(초당). 낮을수록 옛날 플래시 게임처럼 뚝뚝 끊겨 보인다. 부드럽게 하려면 60. */
 export const FPS =  100;
@@ -30,10 +30,11 @@ export const PLAYER = {
   height: 36,
   walkSpeed: 190,
   climbSpeed: 150,
-  /** 점프 높이 = jumpVelocity² / (2 × gravity) ≈ 33px, 체공 약 0.33초, 수평 약 63px.
-   *  불꽃(FLAME.height)보다 높고 몬스터(ENEMY.height)보다 낮아야 한다.
+  /** 점프 높이 = jumpVelocity² / (2 × gravity) ≈ 37px, 체공 약 0.35초, 수평 약 67px.
+   *  불꽃(FLAME.height)보다 높고 몬스터(ENEMY.height 48)보다 낮아야 한다(몬스터는 못 넘는다).
+   *  걸으면서 불꽃을 넘으려면 불꽃 21~46px 앞에서 뛰면 된다(여유 약 0.13초).
    *  2칸(64px) 틈은 가장자리 가까이에서 뛰어야 건넌다. */
-  jumpVelocity: 400,
+  jumpVelocity: 420,
   gravity: 2400,
   /** false면 공중에서 좌우 방향을 바꿀 수 없다. 뛰는 순간의 방향으로 날아간다. */
   airControl: false,
@@ -41,8 +42,12 @@ export const PLAYER = {
   safeFallHeight: 100,
   /** 사다리 중심에서 이 거리 안에 있으면 사다리를 탈 수 있다. */
   ladderGrab: 14,
+  /** 착지하기 조금 전에 누른 점프도 착지하자마자 뛴다(ms). 아이템을 먹고 잠깐 멈춘 동안 누른 것도 포함 */
+  jumpBufferMs: 130,
+  /** 발판 끝에서 막 떨어지기 시작한 직후에도 이 시간(ms) 안에는 점프할 수 있다. 약 11px */
+  coyoteMs: 60,
+  /** 스피드 부츠를 신었을 때 걷기 속도 배율. 부츠는 죽거나 다음 레벨로 넘어갈 때까지 유지된다. */
   boostMultiplier: 1.5,
-  boostDurationMs: 8000,
 };
 
 export const ENEMY = {
@@ -68,11 +73,16 @@ export const DIFFICULTY = {
 /** 상자에서 나온 몬스터는 상자 x ± 이 거리(px) 안에서만 순찰한다. 길을 막지 않도록 상자는 막다른 곳에 둔다. */
 export const CHEST_ENEMY_RANGE = 100;
 
-/** 기본 아이템을 먹는 순간 게임 전체(플레이어 포함)가 멈추는 시간(ms). 0이면 멈추지 않는다. */
-export const PICKUP_PAUSE_MS = 500;
+/** 레벨 몬스터 종류 순서. 레벨 데이터에 look이 없으면 (레벨 번호 + 몬스터 순서)에 따라 이 목록을 돌아가며 쓴다.
+ *  쿵쿵 냄비, 눈물 양파, 꿀꺽 우유, 짭짤 소금통, 뽀글 브로콜리, 팝팝 토스터 */
+export const ENEMY_LOOKS = ['pot', 'onion', 'milk', 'salt', 'broccoli', 'toaster'] as const;
+
+/** 기본 아이템을 먹는 순간 게임 전체(플레이어 포함)가 멈추는 시간(ms). 0이면 멈추지 않는다(지금은 멈추지 않음). */
+export const PICKUP_PAUSE_MS = 0;
 
 /** 불꽃 함정 크기. 점프 높이(약 33px)보다 충분히 낮아야 뛰어넘을 수 있다. */
-export const FLAME = { width: 12, height: 16 };
+/** 불꽃 판정: 그림(18×22)에서 파란 몸통 아래쪽만. 위쪽 노란 끝은 닿아도 괜찮다. */
+export const FLAME = { width: 8, height: 12 };
 
 export const SCORE = {
   item: 50,
@@ -82,15 +92,15 @@ export const SCORE = {
 export const START_LIVES = 3;
 
 /** 이 글자를 모두 모으면 생명 +1. */
-export const BONUS_WORD = 'STAR';
+export const BONUS_WORD = 'BAKING';
 
 export const COLORS = {
-  wall: 0x2a2d3a,
-  brick: 0x333747,
+  wall: 0x3a2c40, // 밤의 부엌 타일 벽
+  brick: 0x4a3a52, // 타일 줄눈
   floor: 0x8a8f9e,
   floorTop: 0xb7bccb,
   floorBottom: 0x5d6170,
-  ladder: 0xc08a3e,
+  ladder: 0xc98b4b, // 나무 사다리
   player: 0x6fd36a,
   enemy: 0xe2558f,
   chest: 0xc8962e,
