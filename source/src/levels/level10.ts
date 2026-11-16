@@ -39,19 +39,19 @@ export const level10: LevelDef = {
   traps: [],
   boss: {
     name: '마녀 쿠르르',
-    hp: 7,
+    hp: 5,
     // 맞을 때마다 30씩 빨라진다
     speed: 110,
     speedPerHit: 30,
     start: { x: 384, y: 80 },
     throwCooldownMs: 650,
     // 목적지를 플레이어 위치로 고를 확률과 맞을 때마다 늘어나는 양
-    homingChance: 0.3,
-    homingPerHit: 0.06,
+    homingChance: 0.05,
+    homingPerHit: 0,
     hoverMs: 450,
-    // 머리 위 돌을 피할 확률과 맞을 때마다 늘어나는 양
-    dodgeChance: 0.25,
-    dodgePerHit: 0.06,
+    // 머리 위 돌을 피할 확률과 맞을 때마다 늘어나는 양 (0이면 돌을 그대로 맞는다)
+    dodgeChance: 0,
+    dodgePerHit: 0,
     // 플레이어를 노리고 날아올 때 속도 배율
     chargeMultiplier: 1.3,
   },
