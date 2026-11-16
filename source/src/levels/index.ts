@@ -45,7 +45,8 @@ export function validateLevel(level: LevelDef, index: number): string[] {
     ...level.items.map((o) => ({ ...o, what: '아이템' })),
     ...level.chests.map((o) => ({ ...o, what: '상자' })),
     ...level.letters.map((o) => ({ ...o, what: `글자 ${o.char}` })),
-    ...level.enemies.map((o) => ({ ...o, what: '적' })),
+    // 틈 위를 지나가는 몬스터(crossGaps)는 틈 위에서 시작해도 된다.
+    ...level.enemies.filter((o) => !o.crossGaps).map((o) => ({ ...o, what: '적' })),
     ...level.traps.map((o) => ({ ...o, what: '함정' })),
   ];
   for (const o of placed) {

@@ -18,7 +18,10 @@ export const HEIGHT = PLAY_HEIGHT + HUD_HEIGHT;
 export const TILE = 32;
 export const COLUMNS = WIDTH / TILE;
 
+/** 밟는 판정 두께(물리) */
 export const FLOOR_THICKNESS = 16;
+/** 화면에 그리는 발판 블록 한 칸의 크기. 한 칸 = TILE(32px) 정사각형. */
+export const BLOCK_SIZE = 32;
 /** 각 층 발판 윗면의 y. 0층이 맨 아래 바닥, 4층이 맨 위. */
 export const FLOOR_Y = [608, 488, 368, 248, 128];
 

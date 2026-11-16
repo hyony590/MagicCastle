@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  BLOCK_SIZE,
   BONUS_WORD,
   CHEST_ENEMY_RANGE,
   COLORS,
@@ -257,6 +258,28 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 발판 블록 한 칸. 밟는 면(물리)은 윗면이고, 블록은 그 아래로 BLOCK_SIZE만큼 그린다. */
+  private drawBlock(g: Phaser.GameObjects.Graphics, col: number, top: number) {
+    const x = col * TILE;
+    const s = BLOCK_SIZE;
+    g.fillStyle(COLORS.floor).fillRect(x, top, TILE, s);
+    g.fillStyle(COLORS.floorTop).fillRect(x, top, TILE, 3); // 윗면 밝게
+    g.fillStyle(COLORS.floorTop).fillRect(x, top, 2, s); // 왼쪽 밝게
+    g.fillStyle(COLORS.floorBottom).fillRect(x + TILE - 2, top, 2, s); // 오른쪽 어둡게(칸 경계)
+    g.fillStyle(COLORS.floorBottom).fillRect(x, top + s - 3, TILE, 3); // 아랫면 어둡게
+    if (ADMIN) {
+      // 개발 중에는 칸 번호를 적는다. floors의 [a, b]와 바로 맞춰 볼 수 있다.
+      this.add
+        .text(x + TILE / 2, top + s / 2 + 1, String(col), {
+          fontFamily: 'monospace',
+          fontSize: '11px',
+          color: '#3b3e4a',
+        })
+        .setOrigin(0.5)
+        .setDepth(0.5);
+    }
+  }
+
   private buildFloors(): Phaser.GameObjects.Rectangle[] {
     const platforms: Phaser.GameObjects.Rectangle[] = [];
     const g = this.add.graphics();
@@ -265,9 +288,8 @@ export class GameScene extends Phaser.Scene {
       for (const [a, b] of segments) {
         const x = a * TILE;
         const w = (b - a) * TILE;
-        g.fillStyle(COLORS.floor).fillRect(x, top, w, FLOOR_THICKNESS);
-        g.fillStyle(COLORS.floorTop).fillRect(x, top, w, 3);
-        g.fillStyle(COLORS.floorBottom).fillRect(x, top + FLOOR_THICKNESS - 3, w, 3);
+        // 한 칸(32px)마다 네모 블록 하나. 레벨 데이터의 칸 번호와 화면이 그대로 대응한다.
+        for (let col = a; col < b; col++) this.drawBlock(g, col, top);
 
         // 위에서만 밟히는 한 방향 발판. 아래·옆에서는 통과한다.
         const r = this.add.rectangle(x + w / 2, top + FLOOR_THICKNESS / 2, w, FLOOR_THICKNESS);
