@@ -54,7 +54,8 @@ export class TitleScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // 메뉴 버튼
-    const start = new MenuButton(this, cx, 320, 300, 56, '게임 시작', () => this.startGame(0));
+    // 게임 시작은 프롤로그(이야기)를 거쳐 1층으로 간다. 관리자 숫자키·자동 플레이는 프롤로그 없이 바로 시작한다.
+    const start = new MenuButton(this, cx, 320, 300, 56, '게임 시작', () => this.goto('Prologue', { run: newRun() }));
     const help = new MenuButton(this, cx, 396, 300, 56, '게임 설명', () => this.goto('Help'));
     const auto = new MenuButton(this, cx, 472, 300, 56, '자동 플레이 보기', () => this.watchAutoplay());
     new Menu(this, [start, help, auto], 'vertical');

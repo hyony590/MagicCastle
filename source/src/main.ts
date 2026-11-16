@@ -7,6 +7,7 @@ import { BootScene } from './scenes/BootScene';
 import { EndScene } from './scenes/EndScene';
 import { HelpScene } from './scenes/HelpScene';
 import { GameScene } from './scenes/GameScene';
+import { PrologueScene } from './scenes/PrologueScene';
 import { TitleScene } from './scenes/TitleScene';
 
 const game = new Phaser.Game({
@@ -23,7 +24,7 @@ const game = new Phaser.Game({
   },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   pixelArt: true,
-  scene: [BootScene, TitleScene, HelpScene, GameScene, EndScene],
+  scene: [BootScene, TitleScene, HelpScene, PrologueScene, GameScene, EndScene],
 });
 
 // 화면을 창 크기에 맞출 때 1.3배처럼 딱 떨어지지 않는 배율이면, 픽셀을 그대로 늘리는 방식은
