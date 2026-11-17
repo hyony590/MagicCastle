@@ -1,2 +1,6 @@
 node_modules/
 dist/
+
+# 글꼴 파일: 라이선스상 파일 재배포가 금지된 글꼴이 있어 저장소에 올리지 않는다(src/assets/fonts/README.md 참고).
+src/assets/fonts/*
+!src/assets/fonts/README.md

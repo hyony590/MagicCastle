@@ -6,6 +6,30 @@ import Phaser from 'phaser';
 export const FONT = 'Galmuri11';
 export const FONT_BIG = 'Galmuri14';
 export const FONT_SMALL = 'Galmuri9';
+/** 프롤로그 대사 글꼴: 뚝딱감자체. 픽셀 글꼴이 아니라 크기 제한은 없다.
+ *  불러오는 순서: ① src/assets/fonts/뚝딱감자체.ttf(있으면, 인터넷 없이도 됨) → ② 눈누 공식 CDN → ③ 둘 다 안 되면 Galmuri11.
+ *  글꼴 파일은 라이선스(파일 재배포 금지) 때문에 git에 올리지 않는다. */
+const STORY_FAMILY = 'TtukttakGamja';
+export const FONT_STORY = `${STORY_FAMILY}, ${FONT}`;
+const STORY_CDN = 'https://cdn.jsdelivr.net/gh/Project-Noonnu/2610081905@tuktakpotato/tuktakpotato/tuktakpotato.woff2';
+
+/** src/assets/fonts에 있는 글꼴 파일만 주소가 생긴다. 없는 파일은 목록에 없다(빌드 오류 없음). */
+const FONT_FILES = import.meta.glob<string>('../assets/fonts/*.{ttf,otf,woff,woff2}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+async function loadStoryFont() {
+  const local = Object.entries(FONT_FILES).find(([path]) => path.endsWith('/뚝딱감자체.ttf'))?.[1];
+  const sources = [local && `url("${local}") format("truetype")`, `url("${STORY_CDN}") format("woff2")`];
+  try {
+    const face = await new FontFace(STORY_FAMILY, sources.filter(Boolean).join(', ')).load();
+    document.fonts.add(face);
+  } catch {
+    console.warn('[글꼴] 뚝딱감자체를 불러오지 못해 프롤로그 대사를 Galmuri로 보여 줍니다.');
+  }
+}
 
 /** 글꼴을 다 불러온 뒤에 글자를 그려야 기본 글꼴로 그려지지 않는다. BootScene에서 기다린다. */
 export async function loadFonts() {
@@ -15,6 +39,7 @@ export async function loadFonts() {
       document.fonts.load(`bold 12px ${FONT}`),
       document.fonts.load(`14px ${FONT_BIG}`),
       document.fonts.load(`10px ${FONT_SMALL}`),
+      loadStoryFont(),
     ]);
   } catch {
     /* 글꼴을 못 불러와도 게임은 기본 글꼴로 진행한다 */

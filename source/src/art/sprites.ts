@@ -1,7 +1,8 @@
 // 모찌의 마녀 부엌 픽셀 그림.
 // 문자 하나가 픽셀 하나다. '.'은 투명. 글자별 색은 PALETTE에 있다.
 // 그림은 SCALE배로 키워서 쓴다(예: 12×18 그림 → 24×36 화면).
-// 나중에 PNG 그림으로 바꾸려면 같은 키 이름으로 이미지를 불러오면 된다(textures.ts 참고).
+// src/assets/sprites/<키>.png 파일이 있으면 그 그림이 이 코드 그림 대신 쓰인다(pngSprites.ts 참고).
+// 여기 그림을 고친 뒤 PNG로 다시 뽑으려면: npm run export:sprites -- --force (직접 고친 PNG도 덮어쓴다)
 
 export const SCALE = 2;
 
@@ -165,11 +166,11 @@ export const SPRITES: Record<string, string[]> = {
     '..kkkkkkkkkk..',
     '.kwwwwwwwwwwk.',
     'kwwwwwwwwwwwwk',
-    'kwkwkwwwwkwkwk',
+    'kwwkwwwwwwkwwk',
     'kwwkwwwwwwkwwk',
     'kwppwwPPwwppwk',
-    '.kwwwkPPkwwwk.',
-    'wkkkwwwwwwkkkw',
+    '.kwwwkrrkwwwk.',
+    'wkkkwwkkwwkkkw',
     'kkkkaaaaaakkkk',
     '..kaaaAAaaak..',
     '...kaaaaaak...',

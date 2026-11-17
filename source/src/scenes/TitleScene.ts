@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
 import { HEIGHT, WIDTH } from '../config';
-import { ADMIN, devStartLevel, levelFromKey, levelKeysLabel } from '../admin';
+import { ADMIN, devPrologueStart, devStartLevel, levelFromKey, levelKeysLabel } from '../admin';
 import { audio } from '../audio';
 import { startAutoplay } from '../autoplay';
 import { LEVELS } from '../levels';
 import { newRun } from '../state';
+import { PROLOGUE } from '../story/prologue';
 import { Menu, MenuButton } from '../ui/button';
 import { STYLE, titleText } from '../ui/text';
 
@@ -21,10 +22,15 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     this.leaving = false;
-    // 개발 중: 페이지를 처음 열 때(저장 후 자동 새로고침 포함) 타이틀을 건너뛰고 바로 레벨로 간다.
+    // 개발 중: 페이지를 처음 열 때(저장 후 자동 새로고침 포함) 타이틀을 건너뛰고 바로 프롤로그(?prologue=4.2)나 레벨(?level=3)로 간다.
     // 게임 오버 뒤 타이틀로 돌아왔을 때는 건너뛰지 않는다.
     if (!autostartDone) {
       autostartDone = true;
+      const prologue = devPrologueStart(PROLOGUE.map((s) => s.beats.length));
+      if (prologue) {
+        this.scene.start('Prologue', { run: newRun(), ...prologue });
+        return;
+      }
       const level = devStartLevel(LEVELS.length);
       if (level !== null) {
         this.scene.start('Game', { run: { ...newRun(), level } });

@@ -18,7 +18,24 @@ export type Sfx =
   | 'push'
   | 'warn'
   | 'bossHit'
-  | 'bossDown';
+  | 'bossDown'
+  // 프롤로그 연출
+  /** 장 제목 카드: 맑은 종소리 두 번 */
+  | 'chapter'
+  /** 하얗게 번쩍: 바람이 휙 */
+  | 'whoosh'
+  /** 발표 직전 북 연타 */
+  | 'drumroll'
+  /** 조명이 켜지며 짠! */
+  | 'fanfare'
+  /** 객석 박수와 환호 */
+  | 'cheer'
+  /** 섬뜩한 순간: 낮게 울리는 불협화음 */
+  | 'sting'
+  /** 육중한 성문이 끼이익 열리며 땅이 울린다 */
+  | 'doorOpen'
+  /** 제목이 쾅 */
+  | 'titleHit';
 
 const MUTE_KEY = 'castle-climber:muted';
 
@@ -34,8 +51,10 @@ function freq(note: string): number {
 // ── 배경음악(오리지널). 8분음표 한 칸씩. '-'는 앞 음 늘이기, '.'는 쉼 ──
 // 레벨: '토끼 폴카' — G장조 2/4, 깡충깡충 빠른 폴카, 오르골 멜로디.
 // 보스: '마녀의 소동' — 빠른 4/4 단조, 쉬지 않는 베이스와 북.
-export type MusicTrack = 'level' | 'boss';
-type SongId = 'polka' | 'boss';
+// 프롤로그(따뜻함): '토끼 마을 자장가' — F장조 3/4 느린 왈츠, 오르골.
+// 프롤로그(불안함): '숲 너머' — D단조, 느리고 듬성듬성한 오르골.
+export type MusicTrack = 'level' | 'boss' | 'warm' | 'uneasy';
+type SongId = 'polka' | 'boss' | 'lullaby' | 'dread';
 
 interface Track {
   tempo: number;
@@ -59,7 +78,64 @@ interface Track {
   chords: string[][];
 }
 
+const F = ['F2', 'A4', 'C5'];
+const C = ['C3', 'E4', 'G4'];
+const Bb = ['Bb2', 'D4', 'F4'];
+const Dm = ['D3', 'F4', 'A4'];
+const dDm = ['D2', 'F4', 'A4'];
+const dBb = ['Bb1', 'D4', 'F4'];
+const dA = ['A1', 'C#4', 'E4'];
+const dGm = ['G1', 'Bb3', 'D4'];
+
 const TRACKS: Record<SongId, Track> = {
+  lullaby: {
+    tempo: 104,
+    bar: 6,
+    lead: 'box',
+    bass: [0],
+    chord: [2, 4],
+    tick: [],
+    // prettier-ignore
+    melody: [
+      'A5', '-', 'C6', '-', 'A5', '-',
+      'G5', '-', 'F5', '-', 'G5', 'A5',
+      'F5', '-', '-', '-', 'C5', '-',
+      'D5', '-', 'E5', '-', 'F5', '-',
+      'G5', '-', 'A5', '-', 'Bb5', '-',
+      'A5', '-', 'G5', '-', 'F5', '-',
+      'E5', '-', 'G5', '-', 'C6', '-',
+      'A5', '-', '-', '-', '.', '.',
+      'C6', '-', 'D6', '-', 'C6', 'A5',
+      'Bb5', '-', 'A5', '-', 'G5', '-',
+      'A5', '-', 'F5', '-', 'D5', '-',
+      'E5', '-', 'F5', '-', 'G5', '-',
+      'A5', '-', 'Bb5', 'A5', 'G5', 'F5',
+      'E5', '-', 'D5', '-', 'C5', '-',
+      'D5', '-', 'E5', '-', 'G5', '-',
+      'F5', '-', '-', '-', '.', '.',
+    ],
+    chords: [F, C, F, Bb, C, F, C, F, F, Bb, Dm, C, Bb, C, C, F],
+  },
+  dread: {
+    tempo: 72,
+    bar: 8,
+    lead: 'box',
+    bass: [0, 4],
+    chord: [6],
+    tick: [],
+    // prettier-ignore
+    melody: [
+      'D5', '-', '-', '-', 'F5', '-', 'E5', '-',
+      'D5', '-', '-', '-', '.', '.', 'A4', '-',
+      'Bb4', '-', '-', '-', 'D5', '-', 'C#5', '-',
+      'A4', '-', '-', '-', '.', '.', '.', '.',
+      'F5', '-', '-', '-', 'A5', '-', 'G#5', '-',
+      'A5', '-', '-', '-', 'E5', '-', 'F5', '-',
+      'D5', '-', 'C#5', '-', 'Bb4', '-', 'A4', '-',
+      'D5', '-', '-', '-', '.', '.', '.', '.',
+    ],
+    chords: [dDm, dDm, dBb, dA, dDm, dA, dGm, dDm],
+  },
   polka: {
     tempo: 168,
     bar: 4,
@@ -239,14 +315,63 @@ class AudioManager {
         this.burst(out, t, 0.6, 0.35, 150);
         this.tone(out, 'sawtooth', 300, t, 1.0, 0.2, 40);
         break;
+      // ── 프롤로그 ──
+      case 'chapter':
+        this.pluck(out, 'sine', freq('E6'), t, 1.2, 0.12);
+        this.pluck(out, 'sine', freq('B6'), t + 0.22, 1.4, 0.08);
+        this.pluck(out, 'triangle', freq('E4'), t, 1.4, 0.1);
+        break;
+      case 'whoosh':
+        this.burst(out, t, 0.7, 0.18, 2500);
+        this.tone(out, 'sine', 300, t, 0.6, 0.06, 1400);
+        break;
+      case 'drumroll':
+        // 점점 커지는 작은북 연타
+        for (let i = 0; i < 26; i++) this.burst(out, t + i * 0.055, 0.05, 0.05 + i * 0.006, 1800);
+        break;
+      case 'fanfare':
+        this.burst(out, t, 0.9, 0.22, 4000);
+        ['C5', 'E5', 'G5'].forEach((n) => this.tone(out, 'square', freq(n), t, 0.5, 0.06));
+        ['C6', 'E6', 'G6', 'C7'].forEach((n, i) => this.tone(out, 'square', freq(n), t + 0.1 + i * 0.07, 0.25, 0.07));
+        break;
+      case 'cheer':
+        // 박수: 흩어진 짧은 잡음 여러 개
+        for (let i = 0; i < 40; i++) this.burst(out, t + Math.random() * 1.6, 0.03, 0.05 + Math.random() * 0.05, 2000 + Math.random() * 3000);
+        break;
+      case 'sting':
+        this.tone(out, 'sawtooth', freq('D2'), t, 1.4, 0.08);
+        this.tone(out, 'sawtooth', freq('D#2'), t, 1.4, 0.06);
+        this.pluck(out, 'sine', freq('G#5'), t + 0.05, 1.2, 0.05);
+        break;
+      case 'doorOpen':
+        // 끼이익(떨리며 내려가는 삐걱임) + 쿠르릉(낮은 울림)
+        for (let i = 0; i < 8; i++) this.tone(out, 'sawtooth', 210 - i * 14, t + i * 0.32, 0.36, 0.035, 190 - i * 14);
+        this.burst(out, t, 2.8, 0.12, 80);
+        this.tone(out, 'sine', 55, t, 2.8, 0.25, 40);
+        break;
+      case 'titleHit':
+        this.tone(out, 'sine', 90, t, 0.9, 0.35, 40);
+        this.burst(out, t, 0.4, 0.2, 600);
+        ['F4', 'A4', 'C5', 'F5'].forEach((n) => this.pluck(out, 'triangle', freq(n), t + 0.05, 2.2, 0.08));
+        break;
     }
+  }
+
+  /** 대사 한 글자를 말할 때 나는 짧은 목소리. 사람마다 높이와 소리 결이 다르다 */
+  voice(pitch: number, wave: OscillatorType = 'square') {
+    const ctx = this.ensure();
+    if (!ctx || ctx.state !== 'running') return;
+    const t = ctx.currentTime + 0.002;
+    // 매번 높이를 살짝 흔들어 말하는 느낌을 낸다
+    const f = pitch * Math.pow(2, (Math.random() * 4 - 2) / 12);
+    this.pluck(this.sfxBus!, wave, f, t, 0.05, wave === 'square' ? 0.035 : 0.07);
   }
 
   /** 곡을 처음부터 튼다. 같은 곡이 이미 나오고 있으면 그대로 둔다. */
   startMusic(track: MusicTrack = 'level') {
     const ctx = this.ensure();
     if (!ctx) return;
-    const song: SongId = track === 'boss' ? 'boss' : 'polka';
+    const song: SongId = ({ level: 'polka', boss: 'boss', warm: 'lullaby', uneasy: 'dread' } as const)[track];
     if (this.musicTimer !== undefined) {
       if (this.song === song) return;
       this.pauseMusic();

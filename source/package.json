@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "check:levels": "esbuild scripts/check-levels.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/check-levels.mjs && node node_modules/.cache/check-levels.mjs"
+    "check:levels": "esbuild scripts/check-levels.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/check-levels.mjs && node node_modules/.cache/check-levels.mjs",
+    "export:sprites": "esbuild scripts/export-sprites.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/export-sprites.mjs && node node_modules/.cache/export-sprites.mjs"
   },
   "dependencies": {
     "galmuri": "^2.40.3",

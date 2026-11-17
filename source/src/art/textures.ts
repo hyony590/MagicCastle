@@ -2,8 +2,7 @@ import Phaser from 'phaser';
 import { PALETTE, SCALE, SPRITES } from './sprites';
 
 /** sprites.ts의 픽셀 지도를 Phaser 텍스처로 만든다. 게임 시작 때 한 번 부른다.
- *  PNG로 바꾸고 싶으면 BootScene.preload에서 같은 키로 this.load.image(키, 경로)를 하고
- *  아래 생성에서 그 키를 건너뛰면 된다. */
+ *  src/assets/sprites에 같은 이름의 PNG가 있으면 pngSprites.ts가 먼저 등록하므로 여기서는 건너뛴다. */
 export function createTextures(scene: Phaser.Scene) {
   for (const [key, rows] of Object.entries(SPRITES)) {
     if (scene.textures.exists(key)) continue;

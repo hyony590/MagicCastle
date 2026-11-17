@@ -238,32 +238,45 @@ function grassAndPath(p: Px, seed: number, night: boolean) {
   }
 }
 
-/** 숲속 마을. festive면 축제 밤(깃발 포함), 아니면 해 질 녘 */
-export function paintVillage(p: Px, festive: boolean) {
-  if (festive) p.vgrad(0, 0, LW, 104, ['#0e0a22', '#1a1336', '#2c1d4c', '#4a2a60', '#74386a', '#9a4a6e']);
-  else p.vgrad(0, 0, LW, 104, ['#22183f', '#3d2a5e', '#6e3f72', '#b05e7c', '#e88a7a', '#ffc488']);
-  stars(p, festive ? 90 : 34, festive ? 80 : 46, festive ? 11 : 5);
-  moon(p, 300, 24, 9, '#fff4d0', '#e6d4a8', festive ? '#6a5a90' : '#f8c8a0');
-  if (!festive) {
-    cloud(p, 30, 30, 60, '#ffd0b0', '#e89a9a', '#a85a7a');
-    cloud(p, 150, 18, 40, '#ffd0b0', '#e89a9a', '#a85a7a');
-    cloud(p, 230, 46, 70, '#ffc8a0', '#e08a8a', '#9a4e72');
+/** 마을의 시간대: 아침(맑은 하늘), 해 질 녘, 축제 밤(깃발 포함) */
+export type VillageTime = 'morning' | 'dusk' | 'night';
+
+/** 숲속 마을 */
+export function paintVillage(p: Px, time: VillageTime) {
+  const festive = time === 'night';
+  if (time === 'morning') {
+    p.vgrad(0, 0, LW, 104, ['#5aa8e0', '#78bce8', '#98ceee', '#bce0f0', '#dcefee', '#fbf6dc']);
+    // 해: 둥근 빛무리 속 하얀 해
+    p.halo(300, 24, 9, 26, '#fff6c8', 0.5);
+    p.disc(300, 24, 9, '#fffbe8');
+    p.disc(298, 22, 5, '#ffffff');
+    cloud(p, 30, 30, 60, '#ffffff', '#eef4fa', '#c8d8ea');
+    cloud(p, 150, 18, 40, '#ffffff', '#eef4fa', '#c8d8ea');
+    cloud(p, 230, 46, 70, '#ffffff', '#e8f0f8', '#bccee4');
   } else {
-    cloud(p, 70, 26, 50, '#5a4880', '#3e2f62', '#2a1f48');
-    cloud(p, 210, 40, 60, '#5a4880', '#3e2f62', '#2a1f48');
+    if (festive) p.vgrad(0, 0, LW, 104, ['#0e0a22', '#1a1336', '#2c1d4c', '#4a2a60', '#74386a', '#9a4a6e']);
+    else p.vgrad(0, 0, LW, 104, ['#22183f', '#3d2a5e', '#6e3f72', '#b05e7c', '#e88a7a', '#ffc488']);
+    stars(p, festive ? 90 : 34, festive ? 80 : 46, festive ? 11 : 5);
+    moon(p, 300, 24, 9, '#fff4d0', '#e6d4a8', festive ? '#6a5a90' : '#f8c8a0');
+    if (!festive) {
+      cloud(p, 30, 30, 60, '#ffd0b0', '#e89a9a', '#a85a7a');
+      cloud(p, 150, 18, 40, '#ffd0b0', '#e89a9a', '#a85a7a');
+      cloud(p, 230, 46, 70, '#ffc8a0', '#e08a8a', '#9a4e72');
+    } else {
+      cloud(p, 70, 26, 50, '#5a4880', '#3e2f62', '#2a1f48');
+      cloud(p, 210, 40, 60, '#5a4880', '#3e2f62', '#2a1f48');
+    }
   }
-  // 먼 산 → 먼 숲 → 가까운 숲(뒤로 갈수록 하늘색에 묻힌다)
-  ridge(p, 86, 10, 3, festive ? '#3a2a5a' : '#7a5684', festive ? '#4e3a70' : '#9a6e94');
-  for (let x = 4; x < LW; x += 9) {
-    const h = 14 + ((x * 13) % 9);
-    if (festive) pine(p, x, 100 + ((x * 7) % 5), h, '#2a1f44', '#33265a', '#4a3a70');
-    else pine(p, x, 100 + ((x * 7) % 5), h, '#4a3a68', '#5a4678', '#7a6090');
-  }
-  for (let x = 0; x < LW; x += 13) {
-    const h = 20 + ((x * 11) % 10);
-    if (festive) pine(p, x + 5, 114 + ((x * 3) % 4), h, '#1e2a26', '#26362c', '#3e5a40');
-    else pine(p, x + 5, 114 + ((x * 3) % 4), h, '#2e4a3a', '#3a5a44', '#6a8a5a');
-  }
+  // 먼 산 → 먼 숲 → 가까운 숲(뒤로 갈수록 하늘색에 묻힌다). [산, 산 밝은 곳, 먼 숲 3색, 가까운 숲 3색]
+  const tones: Record<VillageTime, string[]> = {
+    morning: ['#7aa4c4', '#96bcd6', '#4e7e74', '#5e8e7a', '#80aa88', '#2e5a3a', '#3a6a44', '#62945a'],
+    dusk: ['#7a5684', '#9a6e94', '#4a3a68', '#5a4678', '#7a6090', '#2e4a3a', '#3a5a44', '#6a8a5a'],
+    night: ['#3a2a5a', '#4e3a70', '#2a1f44', '#33265a', '#4a3a70', '#1e2a26', '#26362c', '#3e5a40'],
+  };
+  const c = tones[time];
+  ridge(p, 86, 10, 3, c[0], c[1]);
+  for (let x = 4; x < LW; x += 9) pine(p, x, 100 + ((x * 7) % 5), 14 + ((x * 13) % 9), c[2], c[3], c[4]);
+  for (let x = 0; x < LW; x += 13) pine(p, x + 5, 114 + ((x * 3) % 4), 20 + ((x * 11) % 10), c[5], c[6], c[7]);
   grassAndPath(p, festive ? 21 : 13, festive);
   for (const h of HOUSES) house(p, h);
   for (const x of LAMPS) lamp(p, x);
@@ -513,6 +526,137 @@ export function paintDeparture(p: Px) {
     p.dot(x, y, '#2a3a2c');
     p.dot(x, y - 1, '#22302a');
   }
+}
+
+// ───────────────────────── 성문 앞(가까이) ─────────────────────────
+
+/** 성문 아치(절반 해상도). 문짝 두 개가 이 아치를 반씩 채운다 */
+export const GATE = { cx: 180, halfW: 46, top: 26, springY: 72, bottom: LG };
+/** 성문 양옆 횃불(초록 불꽃) */
+export const GATE_TORCHES = [
+  { x: 118, y: 66 },
+  { x: 242, y: 66 },
+];
+
+const insideArch = (x: number, y: number) =>
+  y <= GATE.bottom && Math.abs(x - GATE.cx) <= GATE.halfW && (y >= GATE.springY || Math.hypot(x - GATE.cx, y - GATE.springY) <= GATE.halfW);
+
+/** 마녀의 성문을 바로 앞에서 올려다본 장면. 문짝은 따로(paintGateDoor) 그려 열리게 한다 */
+export function paintGate(p: Px) {
+  p.vgrad(0, 0, LW, 70, ['#04020a', '#0a0614', '#140a20', '#1e0f2a']);
+  stars(p, 40, 40, 51);
+  // 가는 초승달
+  p.disc(44, 18, 8, '#efe6d8');
+  p.disc(48, 16, 8, '#0a0614');
+  // 성벽: 돌 줄눈과 이끼
+  const WALL = '#1a1424';
+  p.rect(0, 14, LW, LG - 14, WALL);
+  for (let y = 16; y < LG; y += 6) {
+    p.rect(0, y, LW, 1, '#120d1a');
+    for (let x = ((y / 6) % 2) * 7; x < LW; x += 14) p.rect(x, y + 1, 1, 5, '#120d1a');
+  }
+  p.dither(0, 14, LW, LG - 14, '#241c30', 0.18);
+  for (let x = 0; x < LW; x += 5) p.rect(x, 10, 3, 4, WALL); // 성가퀴
+  p.rect(0, 14, LW, 1, '#2e2440');
+  // 양옆 탑
+  for (const [x0, w] of [
+    [0, 62],
+    [298, 62],
+  ]) {
+    p.rect(x0, 0, w, LG, '#16101f');
+    p.rect(x0 === 0 ? w - 1 : x0, 0, 1, LG, '#2e2440');
+    for (let y = 4; y < LG; y += 6) p.rect(x0, y, w, 1, '#0f0b16');
+    p.rect(x0 + w / 2 - 3, 30, 6, 10, '#07040c');
+    p.rect(x0 + w / 2 - 2, 31, 4, 8, '#3e6a3a');
+    p.dot(x0 + w / 2 - 1, 32, '#9ad58b');
+  }
+  // 담쟁이
+  const rnd = seeded(91);
+  for (let i = 0; i < 14; i++) {
+    const x = Math.floor(rnd() * LW);
+    const len = 8 + Math.floor(rnd() * 26);
+    for (let y = 14; y < 14 + len; y++) {
+      const xx = x + Math.round(Math.sin(y * 0.5 + i) * 1.5);
+      if (insideArch(xx, y)) continue;
+      p.dot(xx, y, '#1e3022');
+      if (rnd() < 0.3) p.dot(xx + 1, y, '#2c4630');
+    }
+  }
+  // 문 안쪽(문이 열리면 보인다): 초록 빛이 번지는 어둠
+  for (let y = GATE.top; y <= GATE.bottom; y++) {
+    for (let x = GATE.cx - GATE.halfW; x <= GATE.cx + GATE.halfW; x++) {
+      if (!insideArch(x, y)) continue;
+      const d = Math.hypot((x - GATE.cx) / GATE.halfW, (y - GATE.bottom) / (GATE.bottom - GATE.top));
+      p.dot(x, y, '#060c08');
+      if (bayer(x, y) < 0.9 - d) p.dot(x, y, '#1e4a26');
+      if (bayer(x, y) < 0.55 - d) p.dot(x, y, '#5aa85a');
+    }
+  }
+  // 아치 테두리 돌
+  for (let a = Math.PI; a <= Math.PI * 2 + 0.001; a += 0.02) {
+    for (let r = GATE.halfW + 1; r <= GATE.halfW + 6; r++) {
+      const x = Math.round(GATE.cx + Math.cos(a) * r);
+      const y = Math.round(GATE.springY + Math.sin(a) * r);
+      p.dot(x, y, r === GATE.halfW + 6 ? '#0c0812' : Math.floor(a * 9) % 2 ? '#3a2e48' : '#302640');
+    }
+  }
+  for (const side of [-1, 1]) {
+    const x = GATE.cx + side * (GATE.halfW + 3.5);
+    for (let y = GATE.springY; y <= GATE.bottom; y++) {
+      p.rect(x - 2.5, y, 6, 1, Math.floor(y / 5) % 2 ? '#3a2e48' : '#302640');
+      if (y % 5 === 0) p.rect(x - 2.5, y, 6, 1, '#0c0812');
+    }
+  }
+  // 횃불 받침
+  for (const t of GATE_TORCHES) {
+    p.rect(t.x - 1, t.y, 3, 10, '#0c0812');
+    p.rect(t.x - 3, t.y, 7, 2, '#2a2236');
+    p.rect(t.x - 2, t.y - 4, 5, 4, '#2a2236');
+  }
+  // 돌계단(아래로 갈수록 넓다)
+  for (let i = 0; i < 4; i++) {
+    const y = LG + i * 6;
+    const half = 60 + i * 26;
+    p.rect(GATE.cx - half, y, half * 2, 6, i % 2 ? '#2a2236' : '#241e30');
+    p.rect(GATE.cx - half, y, half * 2, 1, '#4a3e5c');
+    p.rect(GATE.cx - half, y + 5, half * 2, 1, '#120d1a');
+  }
+  p.vgrad(0, LG + 24, LW, LH - LG - 24, ['#120d1a', '#0a0710']);
+  for (let x = 0; x < LW; x++) if (Math.abs(x - GATE.cx) > 60 + 26 * 3) p.rect(x, LG, 1, 24, '#0e0a14');
+}
+
+/** 성문 문짝 한쪽(왼쪽 'l' / 오른쪽 'r'). 아치 반쪽 모양, 세로 널판과 쇠띠 */
+export function paintGateDoor(p: Px, side: 'l' | 'r') {
+  const x0 = side === 'l' ? GATE.cx - GATE.halfW : GATE.cx;
+  for (let y = 0; y < p.h; y++) {
+    for (let x = 0; x < p.w; x++) {
+      const gx = x0 + x;
+      const gy = GATE.top + y;
+      if (!insideArch(gx, gy)) continue;
+      const plank = Math.floor(x / 6);
+      let c = plank % 2 ? '#3e2618' : '#4a2e1e';
+      if (x % 6 === 0) c = '#22140e';
+      if (bayer(gx, gy) < 0.12) c = '#5a3a26';
+      p.dot(x, y, c);
+    }
+  }
+  // 쇠띠와 못
+  for (const by of [24, 52, 80]) {
+    for (let x = 0; x < p.w; x++) {
+      if (!insideArch(x0 + x, GATE.top + by)) continue;
+      p.dot(x, by, '#2a2a34');
+      p.dot(x, by + 1, '#3a3a46');
+      p.dot(x, by + 2, '#1a1a22');
+      if (x % 6 === 3) p.dot(x, by + 1, '#8a8a9a');
+    }
+  }
+  // 가운데 이음매 쪽 테두리와 고리 손잡이
+  const seam = side === 'l' ? p.w - 1 : 0;
+  for (let y = 0; y < p.h; y++) if (insideArch(x0 + seam, GATE.top + y)) p.dot(seam, y, '#120a08');
+  const hx = side === 'l' ? p.w - 6 : 5;
+  p.disc(hx, 62, 3, '#6a6a7a');
+  p.disc(hx, 62, 2, '#2a1810');
+  p.dot(hx, 59, '#aaaabc');
 }
 
 /** 옅은 안개 띠(가로로 이어 붙여 흐르게 한다) */
