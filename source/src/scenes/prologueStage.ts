@@ -757,7 +757,7 @@ export class StageView {
     });
   }
 
-  /** 축제의 밤. 투표함에 하트(표)가 쏙쏙 들어간다. 모찌는 cue 'mochiVotes'에서 걸어 들어온다 */
+  /** 축제의 밤. 투표함에 하트(표)가 쏙쏙 들어간다. 모찌는 처음부터 주민들 사이에 서 있다 */
   private festival() {
     this.backdrop('pro_bg_festival');
     this.twinkles(14, 150);
@@ -779,9 +779,13 @@ export class StageView {
       [540, 'villager_bear', true],
     ];
     this.crowd = spots.map(([x, key, flip]) => this.villager(x, key, flip));
-    this.placeMochi(-40, FEET, 'mochi_walk1');
+    this.placeMochi(296, FEET, 'mochi_happy');
     this.mochiAt = { x: 296, feet: FEET, scale: 2 };
     this.confetti(14);
+    // 발표(drumroll → spotOn)에 쓰는 어둠과 빛줄기
+    const dark = this.overlay(0x05030a);
+    const beams = [0, 1].map(() => this.img(W / 2, 200, 'glow', 3.2).setTint(0xfff0c0).setBlendMode(ADD).setAlpha(0));
+    this.spot = { dark, beams };
   }
 
   /** 무대 위 발표. cue 'drumroll'에서 캄캄해지고 'spotOn'에서 조명이 모찌를 비춘다 */

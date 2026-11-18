@@ -5,7 +5,7 @@ import { HEIGHT, WIDTH } from '../config';
 import { newRun, type RunState } from '../state';
 import { CHIEF, DUBU, KONGI, MOCHI, NABI, PROLOGUE, type PrologueFace, type PrologueMood, type PrologueScreen } from '../story/prologue';
 import { MenuButton } from '../ui/button';
-import { FONT, FONT_STORY, STYLE, titleText } from '../ui/text';
+import { FONT, FONT_STORY, titleText } from '../ui/text';
 import { STAGE, StageView, createPrologueTextures } from './prologueStage';
 
 // 프롤로그: 게임 시작 전에 읽고 넘기는 이야기 화면. 대사·장면 데이터는 story/prologue.ts에 있다.
@@ -18,9 +18,9 @@ const TEXT_PAD = 28;
 const BUTTON_Y = 648;
 
 /** 분위기별 색과 타이핑 속도(글자당 ms) */
-const MOODS: Record<PrologueMood, { text: string; line: number; fill: number; typeMs: number; title: [string, string] }> = {
-  warm: { text: '#f3e9ff', line: 0xf4a6b8, fill: 0x2b1d2f, typeMs: 34, title: ['#ffe0ec', '#ff7aa8'] },
-  uneasy: { text: '#cfc6dc', line: 0x7a6a85, fill: 0x1b1220, typeMs: 52, title: ['#e8dff0', '#9a8fb0'] },
+const MOODS: Record<PrologueMood, { text: string; line: number; fill: number; typeMs: number }> = {
+  warm: { text: '#f3e9ff', line: 0xf4a6b8, fill: 0x2b1d2f, typeMs: 34 },
+  uneasy: { text: '#cfc6dc', line: 0x7a6a85, fill: 0x1b1220, typeMs: 52 },
 };
 
 /** 말하는 사람 이름표 색 */
@@ -72,9 +72,6 @@ export class PrologueScene extends Phaser.Scene {
   private body!: Phaser.GameObjects.Text;
   private nameTag!: Phaser.GameObjects.Container;
   private hint!: Phaser.GameObjects.Image;
-  private title?: Phaser.GameObjects.Text;
-  private dots!: Phaser.GameObjects.Graphics;
-  private pageLabel!: Phaser.GameObjects.Text;
   private prevBtn!: MenuButton;
   private nextBtn!: MenuButton;
 
@@ -140,8 +137,6 @@ export class PrologueScene extends Phaser.Scene {
     this.bars.forEach((b) => b.setDepth(4).setScale(1, 0).setMask(mask));
 
     // 진행 표시(오른쪽 위)
-    this.dots = this.add.graphics();
-    this.pageLabel = this.add.text(WIDTH - 28, 32, '', { ...STYLE.small, color: '#9a8fb0' }).setOrigin(1, 0.5);
 
     // 대사 상자
     this.panel = this.add.graphics();
@@ -275,7 +270,6 @@ export class PrologueScene extends Phaser.Scene {
       else if (lastShot) this.stage.shot(lastShot, false);
       if (newScreen) {
         this.enter(scr, dir);
-        this.drawHeader(scr.title, mood.title);
         // 분위기에 맞는 배경 음악(같은 곡이면 이어서 나온다)
         audio.startMusic(scr.mood);
       }
@@ -286,7 +280,6 @@ export class PrologueScene extends Phaser.Scene {
     this.setLetterbox(!!beat.letterbox, animate);
     this.setTitleDrop(!!beat.titleDrop, animate);
 
-    this.drawProgress();
     this.drawPanel(mood.fill, mood.line);
     const tag = beat.lines.find((l) => l.speaker);
     this.drawNameTag(tag?.speaker);
@@ -482,33 +475,6 @@ export class PrologueScene extends Phaser.Scene {
     this.portrait.forEach((p) => p.setY(p.getData('y0')));
     this.body.setText(this.full);
     this.hint.setVisible(true);
-  }
-
-  private drawHeader(text: string, colors: [string, string]) {
-    this.title?.destroy();
-    this.title = titleText(this, 32, 32, text, 24, colors).setOrigin(0, 0.5).setAlpha(0);
-    this.tweens.add({ targets: this.title, alpha: 1, x: 28, duration: 400 });
-  }
-
-  private drawProgress() {
-    const n = PROLOGUE.length;
-    const size = 12;
-    const gap = 10;
-    const right = WIDTH - 86;
-    const left = right - n * size - (n - 1) * gap;
-    this.dots.clear();
-    for (let i = 0; i < n; i++) {
-      const x = left + i * (size + gap);
-      const y = 32 - size / 2;
-      if (i === this.screen) {
-        this.dots.fillStyle(0xffb3c6).fillRoundedRect(x - 2, y - 2, size + 4, size + 4, 4);
-      } else if (i < this.screen) {
-        this.dots.fillStyle(0x9a6a85).fillRoundedRect(x, y, size, size, 3);
-      } else {
-        this.dots.lineStyle(2, 0x5e4a6a).strokeRoundedRect(x, y, size, size, 3);
-      }
-    }
-    this.pageLabel.setText(`${this.screen + 1} / ${n}`);
   }
 
   private drawPanel(fill: number, line: number) {

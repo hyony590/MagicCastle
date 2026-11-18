@@ -151,26 +151,20 @@ export const KONGI = '콩이';
 const narration = (...lines: string[]): PrologueLine => ({ text: lines.join('\n') });
 const say = (speaker: string, text: string, face?: PrologueFace): PrologueLine => ({ speaker, text, face });
 
-export const PROLOGUE: PrologueScreen[] = [
-  // ───────── 첫 장면: 그날 밤 성문 앞 ─────────
+const SCRIPT: PrologueScreen[] = [
+  // ───────── 1. 마녀의 성: 성문 앞 (이야기의 시작) ─────────
   {
-    title: '그날 밤',
+    title: '마녀의 성',
     stage: 'gate',
     mood: 'uneasy',
     enter: 'slow',
     beats: [
-      { shot: 'reveal', letterbox: true, lines: [narration('그날 밤, 모찌는 마녀의 성 앞에 서 있었습니다.')] },
-      {
-        cue: 'gateGlow',
-        shot: 'gateDoor',
-        letterbox: true,
-        lines: [narration('굳게 닫힌 문 너머에서', '무언가가 모찌를 기다리고 있었습니다.')],
-      },
-      { shot: 'wide', lines: [narration('모든 것은 일주일 전,', '행복의 축제에서 시작되었습니다.')] },
+      { cue: 'gateArrive', shot: 'reveal', letterbox: true, lines: [narration('깊은 숲속, 모찌는 거대한 성문 앞에 도착했습니다.')] },
+      { shot: 'wide', lines: [narration('모든 것은 일주일 전, 행복의 축제에서 시작되었습니다.')] },
     ],
   },
 
-  // ───────── 제1장 평화로운 마을 ─────────
+  // ───────── 2. 평화로운 마을 (제1장) ─────────
   {
     title: '평화로운 마을',
     stage: 'village',
@@ -178,146 +172,96 @@ export const PROLOGUE: PrologueScreen[] = [
     chapter: { no: '제1장', name: '평화로운 마을' },
     enter: 'white',
     beats: [
-      {
-        cue: 'villagersArrive',
-        shot: 'crane',
-        lines: [
-          narration(
-            '아주 먼 숲속에 작은 마을이 하나 있었습니다.',
-            '그곳에는 다양한 동물들이 함께 살아가고 있었습니다.',
-            '마을에는 맛있는 음식이 가득했고, 주민들은 매일 행복한 하루를 보냈습니다.',
-          ),
-        ],
-      },
-      {
-        cue: 'mochiGreets',
-        shot: 'closeMochi',
-        lines: [say(MOCHI, '좋은 아침이에요, 여러분!'), say(DUBU, '모찌다! 오늘은 무슨 요리를 하니?')],
-      },
-    ],
-  },
-  {
-    title: '모두가 사랑한 모찌',
-    stage: 'beloved',
-    mood: 'warm',
-    beats: [
-      { shot: 'wide', lines: [narration('마을 사람들은 모두 모찌를 좋아했습니다.', '모찌 역시 이 마을을 무척 사랑했습니다.')] },
-      { cue: 'whisper', shot: 'whisper', lines: [say(NABI, '올해 축제는… 역시 모찌겠지?'), say(KONGI, '쉿! 모찌가 듣겠어.')] },
-      { cue: 'heartRise', shot: 'sky', lines: [narration('그리고 며칠 뒤,', '마을에 축제의 밤이 찾아왔습니다.')] },
+      { cue: 'villagersArrive', shot: 'crane', lines: [narration('아주 먼 숲속에는 다양한 동물들이 모여 사는 작은 마을이 있었습니다.')] },
+      { cue: 'mochiGreets', shot: 'closeMochi', lines: [say(MOCHI, '좋은 아침이에요, 여러분!')] },
+      { shot: 'wide', lines: [say(DUBU, '어서 와, 모찌! 오늘은 무슨 요리를 할 거야?')] },
+      { shot: 'closeMochi', lines: [say(MOCHI, '오늘은 맛있는 파이를 만들 거예요!')] },
     ],
   },
 
-  // ───────── 제2장 행복의 축제 ─────────
+  // ───────── 3. 행복의 축제: 투표와 발표 ─────────
   {
     title: '행복의 축제',
     stage: 'festival',
     mood: 'warm',
-    chapter: { no: '제2장', name: '행복의 축제' },
     beats: [
-      {
-        shot: 'crane',
-        lines: [
-          narration(
-            '이 마을에는 매년 특별한 축제가 열렸습니다.',
-            '주민들은 자신이 생각하는 가장 행복한 주민에게 투표했습니다.',
-            '가장 많은 표를 받은 주민은 그해의 주인공이 되었고',
-            '마을 모두를 위한 특별한 만찬을 준비할 영광을 얻었습니다.',
-          ),
-        ],
-      },
-      { cue: 'mochiVotes', shot: 'ballot', lines: [narration('모찌도 두근거리는 마음으로 한 표를 넣었습니다.')] },
-      { cue: 'allStare', shot: 'closeMochi', lines: [say(MOCHI, '…응? 다들 왜 그래?', 'mochiPuzzled'), say(DUBU, '아, 아무것도 아니야! 하하…')] },
-    ],
-  },
-  {
-    title: '올해의 주인공',
-    stage: 'spotlight',
-    mood: 'warm',
-    enter: 'cut',
-    beats: [
-      { cue: 'drumroll', shot: 'wide', lines: [say(CHIEF, '올해 행복의 축제, 그 주인공은…')] },
-      { cue: 'spotOn', shot: 'closeMochi', lines: [say(CHIEF, '모찌!'), say(MOCHI, '저, 저요?')] },
-      {
-        shot: 'wide',
-        lines: [narration('모찌는 마을에서 가장 뛰어난 요리사이자', '언제나 밝은 미소를 잃지 않는 토끼였습니다.', '객석에서 커다란 박수가 쏟아졌습니다.')],
-      },
-    ],
-  },
-  {
-    title: '축하의 순간',
-    stage: 'celebration',
-    mood: 'warm',
-    beats: [
-      {
-        cue: 'cheer',
-        shot: 'wide',
-        lines: [say(DUBU, '모찌! 축하해!'), say(NABI, '올해 만찬은 정말 기대되는걸!'), say(KONGI, '역시 모찌가 뽑힐 줄 알았어!')],
-      },
-      {
-        cue: 'chiefEnters',
-        shot: 'followChief',
-        lines: [say(CHIEF, '모찌, 만찬에는 언제나 특별한 재료가 필요하단다.'), say(CHIEF, '그 재료는 숲 너머 마녀의 성에서만 구할 수 있지.')],
-      },
-      { cue: 'chiefBeckons', shot: 'twoShot', lines: [say(CHIEF, '잠깐, 나랑 둘이서 이야기 좀 할까?')] },
-    ],
-  },
-  {
-    title: '촌장의 부탁',
-    stage: 'chief',
-    mood: 'warm',
-    enter: 'slow',
-    beats: [
-      { cue: 'chiefSinister', shot: 'closeChief', letterbox: true, lines: [say(CHIEF, '네가 직접 가져와 줄 수 있겠니?', 'chiefSly')] },
-      { cue: 'mochiAsks', shot: 'closeMochi', lines: [say(MOCHI, '마녀의 성이요…?', 'mochiSad')] },
-      {
-        cue: 'mochiPonders',
-        shot: 'twoShot',
-        lines: [say(CHIEF, '마을 모두가 기다리는 만찬이잖니.'), say(CHIEF, '네 요리 실력이라면 분명 최고의 요리를 만들 수 있을 거야.')],
-      },
-      {
-        cue: 'mochiNods',
-        shot: 'wide',
-        lines: [narration('모찌는 잠시 생각에 잠겼지만, 이내 고개를 끄덕였습니다.', '마을 사람들을 위한 특별한 만찬을 준비하고 싶었으니까요.')],
-      },
+      { shot: 'crane', lines: [narration('마을에서는 매년 행복의 축제가 열렸습니다.')] },
+      { shot: 'ballot', lines: [narration('주민들의 투표로 가장 많은 표를 받은 주민은', '그해의 주인공이 되었습니다.')] },
+      { cue: 'drumroll', shot: 'wide', lines: [narration('그리고 올해의 주인공은…')] },
+      { cue: 'spotOn', shot: 'closeMochi', lines: [say(CHIEF, '바로 모찌입니다!')] },
+      { shot: 'closeMochi', lines: [say(MOCHI, '제가요? 정말 기뻐요!')] },
     ],
   },
 
-  // ───────── 제3장 마녀의 성으로 ─────────
+  // ───────── 4. 특별한 만찬: 축하와 촌장의 부탁 ─────────
+  {
+    title: '특별한 만찬',
+    stage: 'celebration',
+    mood: 'warm',
+    beats: [
+      { cue: 'cheer', shot: 'crowd', lines: [say(DUBU, '모찌! 축하해!')] },
+      { shot: 'wide', lines: [say(NABI, '올해 만찬도 기대되는걸!')] },
+      { shot: 'closeMochi', lines: [say(MOCHI, '고마워요! 모두를 위해 맛있는 요리를 만들게요!')] },
+      { cue: 'chiefEnters', shot: 'closeChief', lines: [say(CHIEF, '올해도 특별한 만찬을 준비해야겠구나.')] },
+      { shot: 'closeChief', lines: [say(CHIEF, '만찬에 필요한 특별한 재료는 예년처럼 마녀의 성에서 구해야 한단다.')] },
+      { cue: 'chiefBeckons', shot: 'twoShot', lines: [say(MOCHI, '마녀의 성이요?')] },
+      { shot: 'closeChief', lines: [say(CHIEF, '그래. 네가 직접 다녀와 줄 수 있겠니?')] },
+      { shot: 'closeMochi', lines: [say(MOCHI, '알겠어요! 제가 꼭 구해 올게요!')] },
+    ],
+  },
+
+  // ───────── 5. 떠나는 날: 마을 사람들의 배웅 ─────────
   {
     title: '떠나는 날',
     stage: 'farewell',
     mood: 'warm',
-    chapter: { no: '제3장', name: '마녀의 성으로' },
     beats: [
-      { cue: 'waving', shot: 'wide', lines: [narration('다음 날 해 질 녘,', '마을 사람들이 모두 나와 모찌를 배웅했습니다.')] },
-      { shot: 'closeMochi', lines: [say(MOCHI, '다녀올게요! 최고의 재료를 꼭 구해 올게요!'), say(DUBU, '조심해서 다녀와, 모찌!')] },
-      { cue: 'mochiLeaves', shot: 'crowd', lines: [narration('모찌의 모습이 길 끝으로 사라지자,', '주민들은 하나둘 손을 내렸습니다.')] },
-    ],
-  },
-  {
-    title: '숲 너머로',
-    stage: 'departure',
-    mood: 'uneasy',
-    beats: [
-      {
-        cue: 'dusk',
-        shot: 'pushIn',
-        lines: [narration('그렇게 모찌는 마녀의 성을 향해 길을 떠났습니다.', '마을 사람들의 기대를 한 몸에 안고서.')],
-      },
+      { cue: 'waving', shot: 'wide', lines: [narration('다음 날, 모찌는 마녀의 성으로 떠날 준비를 마쳤습니다.')] },
+      { shot: 'crowd', lines: [say(DUBU, '조심해서 다녀와, 모찌!')] },
+      { shot: 'closeMochi', lines: [say(MOCHI, '걱정 마세요! 금방 다녀올게요!')] },
+      { cue: 'mochiLeaves', shot: 'crowd', lines: [narration('모찌는 마을 사람들에게 손을 흔들고 숲속으로 향했습니다.')] },
     ],
   },
 
-  // ───────── 다시 성문 앞: 문이 열리고 게임이 시작된다 ─────────
+  // ───────── 6. 마녀의 성: 다시 성문 앞 (문이 열린다) ─────────
   {
     title: '마녀의 성',
     stage: 'gate',
     mood: 'uneasy',
     enter: 'slow',
     beats: [
-      { cue: 'gateArrive', shot: 'reveal', letterbox: true, lines: [narration('그리고 지금, 모찌는 그 문 앞에 서 있습니다.')] },
-      { cue: 'gateGlow', shot: 'gateDoor', letterbox: true, lines: [say(MOCHI, '실례합니다…! 만찬 재료를 받으러 왔어요!', 'mochiPuzzled')] },
-      { cue: 'gateOpens', shot: 'gateDoor', letterbox: true, lines: [narration('끼이익—', '육중한 문이 천천히 열렸습니다.')] },
-      { shot: 'wide', titleDrop: true, lines: [narration('모찌의 모험이 시작됩니다.')] },
+      { cue: 'gateArrive', shot: 'reveal', letterbox: true, lines: [narration('그리고 다시, 마녀의 성.')] },
+      { cue: 'gateGlow', shot: 'gateDoor', letterbox: true, lines: [say(MOCHI, '실례합니다! 만찬에 필요한 재료를 구하러 왔어요!', 'mochiPuzzled')] },
+      { cue: 'gateOpens', shot: 'gateDoor', letterbox: true, lines: [narration('잠시 후, 끼이익——')] },
+      { shot: 'wide', titleDrop: true, lines: [narration('굳게 닫혀 있던 성문이 천천히 열리기 시작했습니다.')] },
     ],
   },
 ];
+
+/**
+ * 한 비트 안에서 말하는 사람이 바뀌면 비트를 나눈다.
+ * 그래서 한 화면에는 한 사람의 대사(또는 내레이션)만 나온다. 나눠진 조각들은 Enter를 누를 때마다 차례로 나온다.
+ * 카메라 구도(shot)와 연출(cue)은 첫 조각에만 두고, 띠(letterbox)와 제목(titleDrop)은 조각마다 이어 준다.
+ */
+function splitBySpeaker(beats: PrologueBeat[]): PrologueBeat[] {
+  const out: PrologueBeat[] = [];
+  for (const beat of beats) {
+    const groups: PrologueLine[][] = [];
+    for (const line of beat.lines) {
+      const last = groups[groups.length - 1];
+      if (last && last[0].speaker === line.speaker) last.push(line);
+      else groups.push([line]);
+    }
+    if (groups.length === 0) {
+      out.push(beat);
+      continue;
+    }
+    groups.forEach((lines, i) => {
+      out.push({ ...beat, lines, cue: i === 0 ? beat.cue : undefined, shot: i === 0 ? beat.shot : undefined });
+    });
+  }
+  return out;
+}
+
+/** 실제로 게임이 쓰는 프롤로그. 대사 데이터는 SCRIPT에 적고, 여기서 화자별로 나눈다. */
+export const PROLOGUE: PrologueScreen[] = SCRIPT.map((s) => ({ ...s, beats: splitBySpeaker(s.beats) }));
